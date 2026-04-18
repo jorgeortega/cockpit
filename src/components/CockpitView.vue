@@ -1,119 +1,215 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { beforeStartChecklist, type ChecklistItem } from '../data/checklist';
+/**
+ * CockpitView — interactive cockpit photo with pan/zoom plus per-item
+ * hotspots.
+ *
+ * Responsibilities:
+ *   - Render the A320neo cockpit image.
+ *   - Overlay a "hotspot" marker for every checklist item in the active flight
+ *     phase.
+ *   - Pan/zoom the image toward the user's mouse, or toward a programmatically
+ *     focused item when the parent requests one.
+ *
+ * Intentionally out of scope:
+ *   - Which items are completed — owned by the parent (App.vue).
+ *   - The checklist data itself — owned by `data/checklist.ts`.
+ *
+ * Pattern: presentational component using props-down / events-up. The parent
+ * decides what phase and what item is focused; this component only renders.
+ *
+ * Acronyms introduced in this file:
+ *   PFD = Primary Flight Display
+ *   ND  = Navigation Display
+ */
+import { ref, computed, watch } from 'vue';
+import { getPhaseById, type ChecklistItem } from '../data/checklist';
 
+// --- Props ------------------------------------------------------------------
+// `activePhaseId` selects which hotspots are shown.
+// `focusedItemId` triggers a programmatic pan/zoom toward that item.
 const props = defineProps<{
+  activePhaseId: string;
   focusedItemId: string | null;
 }>();
 
+// --- Local state ------------------------------------------------------------
 const cockpitRef = ref<HTMLElement | null>(null);
+
+// Mouse coordinates stored normalised (0..1) relative to this component's
+// bounding box. Normalising here keeps the pan math independent of viewport
+// size.
 const mouseX = ref(0.5);
 const mouseY = ref(0.5);
+
+// Item shown in the detail modal, or `null` when the modal is closed.
 const selectedItem = ref<ChecklistItem | null>(null);
+
+// `true` while a programmatic "jump to item" transition is playing. Flipped
+// back to `false` by any genuine mouse movement so the user can always regain
+// free panning.
 const isFocused = ref(false);
+
+// Drives the crosshair overlay — only rendered while the cursor is inside.
 const isMouseInside = ref(false);
 
+// --- Derived data -----------------------------------------------------------
+// Items for the current phase. Resolved via a helper so the lookup rule lives
+// in exactly one place (`data/checklist.ts`). `?? []` keeps `v-for` safe if
+// the parent ever passes an unknown phase id.
+const items = computed<ChecklistItem[]>(
+  () => getPhaseById(props.activePhaseId)?.items ?? [],
+);
+
+// --- Mouse tracking ---------------------------------------------------------
+// Translate raw client coordinates into the 0..1 range so the transform math
+// does not depend on the container's pixel size.
 const handleMouseMove = (event: MouseEvent) => {
   if (!cockpitRef.value) return;
-  
+
   const rect = cockpitRef.value.getBoundingClientRect();
-  
-  // Normalize mouse position relative to THIS container (2/3 of screen)
   const x = (event.clientX - rect.left) / rect.width;
   const y = (event.clientY - rect.top) / rect.height;
-  
-  // Clamp values between 0 and 1
-  const clampedX = Math.max(0, Math.min(1, x));
-  const clampedY = Math.max(0, Math.min(1, y));
 
-  // If user moves mouse after a "jump", resume mouse follow
-  isFocused.value = false; 
-  mouseX.value = clampedX;
-  mouseY.value = clampedY;
+  // Clamp to [0, 1]: rounding error or a fast cursor exit could otherwise
+  // translate the image into an unreachable offset.
+  mouseX.value = Math.max(0, Math.min(1, x));
+  mouseY.value = Math.max(0, Math.min(1, y));
+
+  // Any real mouse movement cancels the "focused item" lock. Without this the
+  // user could be trapped inside a zoom animation they no longer want.
+  isFocused.value = false;
 };
 
-const handleMouseEnter = () => {
-  isMouseInside.value = true;
-};
+const handleMouseEnter = () => { isMouseInside.value = true; };
+const handleMouseLeave = () => { isMouseInside.value = false; };
 
-const handleMouseLeave = () => {
-  isMouseInside.value = false;
-};
+// --- Programmatic focus (jump to a checklist item) --------------------------
+// When the parent sets `focusedItemId`, look up the item in the current phase
+// and snap the pan coordinates to its stored (x, y) percentage. `isFocused`
+// switches the CSS transition to a slower curve so the user's eye can follow
+// the move.
+watch(
+  () => props.focusedItemId,
+  (id) => {
+    if (!id) return;
+    const item = items.value.find((i) => i.id === id);
+    if (item?.x !== undefined && item.y !== undefined) {
+      mouseX.value = item.x / 100;
+      mouseY.value = item.y / 100;
+      isFocused.value = true;
+      selectedItem.value = item;
+    }
+  },
+);
 
-// Listen for jump requests from the parent
-watch(() => props.focusedItemId, (id) => {
-  if (!id) return;
-  const item = beforeStartChecklist.find(i => i.id === id);
-  if (item && item.x !== undefined && item.y !== undefined) {
-    mouseX.value = item.x / 100;
-    mouseY.value = item.y / 100;
-    isFocused.value = true;
-    selectedItem.value = item;
-  }
-});
-
+// --- Dev helper -------------------------------------------------------------
+// Logs the clicked (x, y) in percent. Handy when authoring new hotspots —
+// click the physical switch, copy the coordinates into `checklist.ts`.
 const logPosition = (e: MouseEvent) => {
   if (!cockpitRef.value) return;
-  const rect = cockpitRef.value.querySelector('.image-wrapper')?.getBoundingClientRect();
+  const rect = cockpitRef.value
+    .querySelector('.image-wrapper')
+    ?.getBoundingClientRect();
   if (!rect) return;
-  
   const x = ((e.clientX - rect.left) / rect.width) * 100;
   const y = ((e.clientY - rect.top) / rect.height) * 100;
+   
   console.log(`Clicked at X: ${x.toFixed(2)}%, Y: ${y.toFixed(2)}%`);
 };
 
+// --- Pan/zoom style ---------------------------------------------------------
+// The image is scaled 1.5× and `translate(%, %)` shifts it opposite the
+// mouse, so whatever the cursor hovers grows larger. The (45, 65) multipliers
+// were hand-tuned to feel responsive without revealing the image edges.
 const cockpitStyle = computed(() => {
-  const panX = (mouseX.value - 0.5) * 45; 
-  const panY = (mouseY.value - 0.5) * 65; 
-  
+  const panX = (mouseX.value - 0.5) * 45;
+  const panY = (mouseY.value - 0.5) * 65;
   return {
     transform: `scale(1.5) translate(${-panX}%, ${-panY}%)`,
-    transition: isFocused.value ? 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)' : 'transform 0.15s ease-out'
+    transition: isFocused.value
+      ? 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)' // slower ease for programmatic jumps
+      : 'transform 0.15s ease-out',                 // snappy for live cursor
   };
 });
 </script>
 
 <template>
-  <div 
-    class="cockpit-viewport" 
+  <div
     ref="cockpitRef"
+    class="cockpit-viewport"
     @mousemove="handleMouseMove"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
   >
-    <div class="cockpit-image-container" :style="cockpitStyle">
-      <div class="image-wrapper" @click="logPosition">
-        <img src="../assets/A320neo-Cockpit.png" alt="A320neo Cockpit" class="cockpit-img" />
-        
-        <!-- Hotspots -->
-        <div 
-          v-for="item in beforeStartChecklist" 
+    <div
+      class="cockpit-image-container"
+      :style="cockpitStyle"
+    >
+      <div
+        class="image-wrapper"
+        @click="logPosition"
+      >
+        <img
+          src="../assets/A320neo-Cockpit.png"
+          alt="A320neo Cockpit"
+          class="cockpit-img"
+        >
+
+        <!-- Hotspots: one marker per item in the active phase. -->
+        <div
+          v-for="item in items"
           :key="item.id"
           class="hotspot"
           :class="{ active: focusedItemId === item.id }"
           :style="{ left: item.x + '%', top: item.y + '%' }"
           @click.stop="selectedItem = item"
         >
-          <div class="hotspot-ring"></div>
-          <div class="hotspot-dot"></div>
-          <div class="hotspot-label">{{ item.item }}</div>
+          <div class="hotspot-ring" />
+          <div class="hotspot-dot" />
+          <div class="hotspot-label">
+            {{ item.item }}
+          </div>
         </div>
       </div>
     </div>
-    
-    <div class="crosshair" v-if="isMouseInside"></div>
 
-    <!-- Modal for details -->
+    <div
+      v-if="isMouseInside"
+      class="crosshair"
+    />
+
+    <!-- Detail modal: shown when the user clicks a hotspot. -->
     <Transition name="fade">
-      <div v-if="selectedItem" class="modal-overlay" @click="selectedItem = null">
-        <div class="modal-card" @click.stop>
-          <button class="close-btn" @click="selectedItem = null">×</button>
-          <div class="panel-tag">{{ selectedItem.panel.toUpperCase() }}</div>
+      <div
+        v-if="selectedItem"
+        class="modal-overlay"
+        @click="selectedItem = null"
+      >
+        <div
+          class="modal-card"
+          @click.stop
+        >
+          <button
+            class="close-btn"
+            @click="selectedItem = null"
+          >
+            ×
+          </button>
+          <div class="panel-tag">
+            {{ selectedItem.panel.toUpperCase() }}
+          </div>
           <h2>{{ selectedItem.item }}</h2>
-          <div class="action-required">Action: <span>{{ selectedItem.action }}</span></div>
+          <div class="action-required">
+            Action: <span>{{ selectedItem.action }}</span>
+          </div>
           <p>{{ selectedItem.description }}</p>
           <div class="modal-footer">
-            <button class="btn-primary" @click="selectedItem = null">GOT IT</button>
+            <button
+              class="btn-primary"
+              @click="selectedItem = null"
+            >
+              GOT IT
+            </button>
           </div>
         </div>
       </div>

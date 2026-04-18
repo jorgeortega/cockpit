@@ -1,29 +1,88 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+/**
+ * App.vue — the root component and single source of truth for cross-component
+ * state. Two children make up the entire UI:
+ *   - CockpitView (presentational)      — photo + hotspots for the active phase.
+ *   - ChecklistPanel (presentational)  — list of items for the active phase.
+ *
+ * State owned here:
+ *   - `activePhaseId`   — which flight phase is currently displayed.
+ *   - `focusedItemId`   — the checklist item the cockpit should pan to.
+ *   - `completedItems`  — ids the user has checked off.
+ *
+ * Pattern: unidirectional data flow. Children receive props; children emit
+ * events; App decides how state changes. No child writes to another child
+ * directly, which prevents the classic split-brain bug where two components
+ * disagree about truth.
+ */
+import { computed, ref, watch } from 'vue'
 import CockpitView from './components/CockpitView.vue'
-import ChecklistOverlay from './components/ChecklistOverlay.vue'
-import { flightChecklists } from './data/checklist'
+import ChecklistPanel from './components/ChecklistPanel.vue'
+import { DEFAULT_PHASE_ID } from './data/checklist'
+import {
+  deserialize,
+  loadState,
+  saveState,
+  serialize,
+} from './data/persistence'
 
-const activePhaseId = ref(flightChecklists[0].id)
+// Seed from localStorage on boot so the user resumes exactly where they left
+// off. `loadState` returns `null` if nothing is saved or if the blob is
+// corrupt (already logged + cleared inside the helper).
+const saved = loadState()
+
+const activePhaseId = ref<string>(saved?.activePhaseId ?? DEFAULT_PHASE_ID)
 const focusedItemId = ref<string | null>(null)
-const completedItems = ref<Set<string>>(new Set())
 
+// Completion state keyed by phase id. A `Map<phaseId, Set<itemId>>` gives us:
+//   - O(1) lookup of the active phase's set.
+//   - Independent progress per phase without a cross-phase scan.
+//   - Easy per-phase reset (just `delete` the key).
+// The child only needs the Set for the active phase; we expose it via a
+// computed so the child stays oblivious to the Map structure.
+const completedByPhase = ref<Map<string, Set<string>>>(
+  saved ? deserialize(saved.completed) : new Map(),
+)
+
+const activeCompleted = computed<Set<string>>(
+  () => completedByPhase.value.get(activePhaseId.value) ?? new Set(),
+)
+
+// Pan the cockpit to the requested item. Does not touch completion state.
 const handleFocusItem = (id: string) => {
   focusedItemId.value = id
 }
 
+// Switch flight phase. Clear any focused item so the next phase doesn't show
+// a stale "jump" animation carried over from the previous phase's items.
 const handlePhaseChange = (phaseId: string) => {
   activePhaseId.value = phaseId
-  focusedItemId.value = null // Clear focus when changing phase
+  focusedItemId.value = null
 }
 
+// Toggle completion for a single item in the current phase. Mutates the Map
+// then reassigns the ref so Vue picks up the change (reassignment is the
+// cheapest way to keep reactivity without a wrapping deep-watcher).
 const handleToggleItem = (id: string) => {
-  if (completedItems.value.has(id)) {
-    completedItems.value.delete(id)
-  } else {
-    completedItems.value.add(id)
-  }
+  const next = new Map(completedByPhase.value)
+  const set = new Set(next.get(activePhaseId.value) ?? new Set<string>())
+  if (set.has(id)) set.delete(id)
+  else set.add(id)
+  next.set(activePhaseId.value, set)
+  completedByPhase.value = next
 }
+
+// Persist on any state change. Each toggle / phase switch reassigns the
+// reference (see `handleToggleItem` / `handlePhaseChange`), so a shallow
+// watch is enough — no `deep: true` required. The write is cheap (single
+// JSON.stringify of a small object), so no debouncing is warranted.
+watch([activePhaseId, completedByPhase], () => {
+  saveState({
+    version: 1,
+    activePhaseId: activePhaseId.value,
+    completed: serialize(completedByPhase.value),
+  })
+})
 </script>
 
 <template>
@@ -35,9 +94,9 @@ const handleToggleItem = (id: string) => {
       />
     </main>
     <aside class="checklist-section">
-      <ChecklistOverlay 
+      <ChecklistPanel
         :active-phase-id="activePhaseId"
-        :completed-items="completedItems"
+        :completed-items="activeCompleted"
         @focus-item="handleFocusItem"
         @phase-change="handlePhaseChange"
         @toggle-item="handleToggleItem"
