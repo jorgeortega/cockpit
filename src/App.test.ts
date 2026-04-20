@@ -136,7 +136,7 @@ describe('App', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          version: 1,
+          version: 2,
           activePhaseId: phaseB,
           completed: {
             [phaseB]: ['seeded-item'],

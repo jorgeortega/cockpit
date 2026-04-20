@@ -28,9 +28,9 @@ describe('DEFAULT_PHASE_ID', () => {
 
 describe('getPhaseById', () => {
   it('returns the matching phase', () => {
-    const phase = getPhaseById('preliminary')
+    const phase = getPhaseById('cockpit-prep')
     expect(phase).toBeDefined()
-    expect(phase?.id).toBe('preliminary')
+    expect(phase?.id).toBe('cockpit-prep')
   })
 
   it('returns undefined for unknown ids (caller decides fallback)', () => {
@@ -74,15 +74,15 @@ describe('ACRONYMS + expandAcronyms', () => {
 
 describe('getItemById', () => {
   it('returns the item inside the named phase', () => {
-    const item = getItemById('preliminary', 'p1')
-    expect(item?.id).toBe('p1')
+    const item = getItemById('cockpit-prep', 'cp1')
+    expect(item?.id).toBe('cp1')
   })
 
   it('returns undefined when the phase exists but the item does not', () => {
-    expect(getItemById('preliminary', 'zzz')).toBeUndefined()
+    expect(getItemById('cockpit-prep', 'zzz')).toBeUndefined()
   })
 
   it('returns undefined when the phase itself is unknown', () => {
-    expect(getItemById('no-such-phase', 'p1')).toBeUndefined()
+    expect(getItemById('no-such-phase', 'cp1')).toBeUndefined()
   })
 })

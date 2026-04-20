@@ -78,7 +78,7 @@ const handleToggleItem = (id: string) => {
 // JSON.stringify of a small object), so no debouncing is warranted.
 watch([activePhaseId, completedByPhase], () => {
   saveState({
-    version: 1,
+    version: 2,
     activePhaseId: activePhaseId.value,
     completed: serialize(completedByPhase.value),
   })

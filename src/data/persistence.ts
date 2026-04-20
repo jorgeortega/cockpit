@@ -10,15 +10,16 @@
 //     `null` load + a console warning — never a thrown error that would
 //     crash the UI on boot.
 //
-// The storage key is versioned (`cockpit-sim:v1`). When the schema changes
+// The storage key is versioned (`cockpit-sim:v2`). When the schema changes
 // in a backwards-incompatible way, bump the version; the old blob is left in
 // place under its old key so nothing is silently migrated or lost.
+// v2 — phase and item ids realigned to the FBW A32NX checklist (2026-04).
 // ---------------------------------------------------------------------------
 
-export const STORAGE_KEY = 'cockpit-sim:v1';
+export const STORAGE_KEY = 'cockpit-sim:v2';
 
 export interface PersistedState {
-  version: 1;
+  version: 2;
   activePhaseId: string;
   /**
    * Keyed by phase id → array of completed item ids. An array (rather than a
@@ -59,7 +60,7 @@ export function deserialize(
 function isValidState(raw: unknown): raw is PersistedState {
   if (raw === null || typeof raw !== 'object') return false;
   const s = raw as Partial<PersistedState>;
-  if (s.version !== 1) return false;
+  if (s.version !== 2) return false;
   if (typeof s.activePhaseId !== 'string') return false;
   if (s.completed === null || typeof s.completed !== 'object') return false;
   for (const ids of Object.values(s.completed)) {

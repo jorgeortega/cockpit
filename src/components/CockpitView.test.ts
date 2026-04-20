@@ -17,7 +17,7 @@ import { flightChecklists, getPhaseById } from '../data/checklist'
 
 describe('CockpitView', () => {
   it('renders one hotspot per item in the active phase', () => {
-    const phaseId = 'preliminary'
+    const phaseId = 'cockpit-prep'
     const expected = getPhaseById(phaseId)!.items.length
 
     const wrapper = mount(CockpitView, {
@@ -29,10 +29,10 @@ describe('CockpitView', () => {
 
   it('re-renders hotspots when activePhaseId changes', async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: 'preliminary', focusedItemId: null },
+      props: { activePhaseId: 'cockpit-prep', focusedItemId: null },
     })
 
-    const nextPhaseId = 'takeoff'
+    const nextPhaseId = 'before-start'
     await wrapper.setProps({ activePhaseId: nextPhaseId })
 
     const expected = getPhaseById(nextPhaseId)!.items.length

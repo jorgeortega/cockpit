@@ -9,7 +9,7 @@ import ChecklistPanel from './ChecklistPanel.vue'
 import PhaseSelector from './PhaseSelector.vue'
 import { flightChecklists, getPhaseById } from '../data/checklist'
 
-const PHASE_ID = 'preliminary'
+const PHASE_ID = 'cockpit-prep'
 
 const makeWrapper = (completed: Set<string> = new Set()) =>
   mount(ChecklistPanel, {
@@ -79,11 +79,11 @@ describe('ChecklistPanel', () => {
     const wrapper = makeWrapper()
     const selector = wrapper.findComponent(PhaseSelector)
 
-    await selector.vm.$emit('phase-change', 'takeoff')
+    await selector.vm.$emit('phase-change', 'before-start')
 
     const events = wrapper.emitted('phase-change')
     expect(events).toBeTruthy()
-    expect(events![0]).toEqual(['takeoff'])
+    expect(events![0]).toEqual(['before-start'])
   })
 
   it('renders a progress bar whose width reflects completed / total', () => {

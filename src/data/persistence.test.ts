@@ -14,11 +14,11 @@ import {
 } from './persistence'
 
 const sampleState: PersistedState = {
-  version: 1,
-  activePhaseId: 'takeoff',
+  version: 2,
+  activePhaseId: 'before-start',
   completed: {
-    preliminary: ['p1', 'p2'],
-    takeoff: ['to1'],
+    'cockpit-prep': ['cp1', 'cp2'],
+    'before-start': ['bs1'],
   },
 }
 
@@ -34,17 +34,17 @@ describe('persistence', () => {
   describe('serialize / deserialize', () => {
     it('round-trips a Map<string, Set<string>> through a plain object', () => {
       const original = new Map<string, Set<string>>([
-        ['preliminary', new Set(['p1', 'p2'])],
-        ['takeoff', new Set(['to1'])],
+        ['cockpit-prep', new Set(['cp1', 'cp2'])],
+        ['before-start', new Set(['bs1'])],
       ])
       const record = serialize(original)
       expect(record).toEqual({
-        preliminary: ['p1', 'p2'],
-        takeoff: ['to1'],
+        'cockpit-prep': ['cp1', 'cp2'],
+        'before-start': ['bs1'],
       })
       const restored = deserialize(record)
-      expect(restored.get('preliminary')).toEqual(new Set(['p1', 'p2']))
-      expect(restored.get('takeoff')).toEqual(new Set(['to1']))
+      expect(restored.get('cockpit-prep')).toEqual(new Set(['cp1', 'cp2']))
+      expect(restored.get('before-start')).toEqual(new Set(['bs1']))
     })
 
     it('deserialize handles an empty record', () => {
@@ -60,7 +60,7 @@ describe('persistence', () => {
 
     it('uses the versioned storage key', () => {
       saveState(sampleState)
-      expect(STORAGE_KEY).toBe('cockpit-sim:v1')
+      expect(STORAGE_KEY).toBe('cockpit-sim:v2')
       expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull()
     })
   })
@@ -93,7 +93,7 @@ describe('persistence', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ version: 1, activePhaseId: 123, completed: 'nope' }),
+        JSON.stringify({ version: 2, activePhaseId: 123, completed: 'nope' }),
       )
       expect(loadState()).toBeNull()
       expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
@@ -105,9 +105,9 @@ describe('persistence', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          version: 1,
-          activePhaseId: 'preliminary',
-          completed: { preliminary: [1, 2, 3] },
+          version: 2,
+          activePhaseId: 'cockpit-prep',
+          completed: { 'cockpit-prep': [1, 2, 3] },
         }),
       )
       expect(loadState()).toBeNull()
@@ -119,9 +119,9 @@ describe('persistence', () => {
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
-          version: 1,
-          activePhaseId: 'preliminary',
-          completed: { preliminary: 'p1' },
+          version: 2,
+          activePhaseId: 'cockpit-prep',
+          completed: { 'cockpit-prep': 'cp1' },
         }),
       )
       expect(loadState()).toBeNull()
@@ -132,7 +132,7 @@ describe('persistence', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ version: 1, activePhaseId: 'preliminary', completed: null }),
+        JSON.stringify({ version: 2, activePhaseId: 'cockpit-prep', completed: null }),
       )
       expect(loadState()).toBeNull()
       expect(warn).toHaveBeenCalled()
