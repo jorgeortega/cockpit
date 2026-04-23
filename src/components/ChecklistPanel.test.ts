@@ -4,22 +4,45 @@
 // completed item ids, the component renders the right rows, marks the right
 // rows complete, and emits the right events on click.
 import { mount } from '@vue/test-utils'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { nextTick } from 'vue'
 import ChecklistPanel from './ChecklistPanel.vue'
 import PhaseSelector from './PhaseSelector.vue'
 import { flightChecklists, getPhaseById } from '../data/checklist'
 
 const PHASE_ID = 'cockpit-prep'
 
-const makeWrapper = (completed: Set<string> = new Set()) =>
+const makeWrapper = (completed: Set<string> = new Set(), scrollToId: string | null = null) =>
   mount(ChecklistPanel, {
     props: {
       activePhaseId: PHASE_ID,
       completedItems: completed,
+      scrollToId,
     },
   })
 
 describe('ChecklistPanel', () => {
+  it('calls scrollIntoView when scrollToId prop changes', async () => {
+    const scrollMock = vi.fn()
+    // We need to attach to document.body for getElementById to work if the
+    // component uses it. 
+    const wrapper = makeWrapper()
+    
+    // We need a way to mock the element that will be scrolled.
+    // In our implementation, we'll use document.getElementById(`item-${id}`).
+    const itemId = getPhaseById(PHASE_ID)!.items[0].id
+    const mockEl = document.createElement('div')
+    mockEl.id = `item-${itemId}`
+    mockEl.scrollIntoView = scrollMock
+    document.body.appendChild(mockEl)
+
+    await wrapper.setProps({ scrollToId: itemId })
+    await nextTick()
+
+    expect(scrollMock).toHaveBeenCalled()
+    document.body.removeChild(mockEl)
+  })
+
   it('renders one row per item in the active phase', () => {
     const wrapper = makeWrapper()
     const expected = getPhaseById(PHASE_ID)!.items.length

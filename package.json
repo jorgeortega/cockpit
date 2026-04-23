@@ -10,13 +10,19 @@
     "test": "vitest",
     "test:run": "vitest run",
     "coverage": "vitest run --coverage",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "playwright:install": "npx playwright install chromium",
+    "test:playwright": "npx playwright test --headed",
+    "playwright:visual": "npx playwright test tests/playwright/visual --project=chromium --headed",
+    "playwright:visual:ci": "npx playwright test tests/playwright/visual --project=chromium",
+    "playwright:visual:update": "npx playwright test tests/playwright/visual --project=chromium --update-snapshots --headed"
   },
   "dependencies": {
     "vue": "^3.5.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.9.0",
     "@vitejs/plugin-vue": "^5.1.4",
     "@vitest/coverage-v8": "^2.1.9",

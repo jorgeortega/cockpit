@@ -12,7 +12,7 @@
  * Acronyms introduced in this file:
  *   QRH = Quick Reference Handbook (the paper checklist this UI mimics)
  */
-import { computed } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { flightChecklists, getPhaseById } from '../data/checklist';
 import PhaseSelector from './PhaseSelector.vue';
 import ChecklistItemRow from './ChecklistItemRow.vue';
@@ -20,9 +20,11 @@ import ChecklistItemRow from './ChecklistItemRow.vue';
 // --- Props ------------------------------------------------------------------
 // `activePhaseId` selects which phase's items to render.
 // `completedItems` is the Set of item ids the parent considers checked off.
+// `scrollToId` is an optional item id to smoothly scroll into view.
 const props = defineProps<{
   activePhaseId: string;
   completedItems: Set<string>;
+  scrollToId?: string | null;
 }>();
 
 // --- Events -----------------------------------------------------------------
@@ -62,6 +64,19 @@ const progressPercent = computed(() => {
 // contract regardless of how the row is implemented.
 const onRowToggle = (id: string) => emit('toggle-item', id);
 const onRowFocus = (id: string) => emit('focus-item', id);
+
+// --- Side Effects -----------------------------------------------------------
+// Smoothly scroll the requested item into view. Triggered when the parent
+// updates `scrollToId` (usually following a cockpit hotspot click).
+watch(() => props.scrollToId, async (id) => {
+  if (!id) return;
+  // Ensure the DOM has updated with the new phase/items before searching.
+  await nextTick();
+  const el = document.getElementById(`item-${id}`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
 </script>
 
 <template>
@@ -88,6 +103,7 @@ const onRowFocus = (id: string) => emit('focus-item', id);
       <div class="checklist-items">
         <ChecklistItemRow
           v-for="item in items"
+          :id="`item-${item.id}`"
           :key="item.id"
           :item="item"
           :completed="completedItems.has(item.id)"

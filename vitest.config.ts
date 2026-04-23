@@ -12,6 +12,7 @@ export default defineConfig({
     environment: 'jsdom',
     // `expect`, `describe`, `it` available globally without imports.
     globals: true,
+    setupFiles: ['./tests/setup.ts'],
     // Co-locate tests next to source: src/foo.ts + src/foo.test.ts.
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     coverage: {

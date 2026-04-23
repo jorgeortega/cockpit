@@ -16,9 +16,10 @@ import CockpitView from './CockpitView.vue'
 import { flightChecklists, getPhaseById } from '../data/checklist'
 
 describe('CockpitView', () => {
-  it('renders one hotspot per item in the active phase', () => {
+  it('renders one hotspot per item in the active phase (excluding 0,0 coordinates)', () => {
     const phaseId = 'cockpit-prep'
-    const expected = getPhaseById(phaseId)!.items.length
+    // cp1 has 0,0
+    const expected = getPhaseById(phaseId)!.items.filter(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0).length
 
     const wrapper = mount(CockpitView, {
       props: { activePhaseId: phaseId, focusedItemId: null },
@@ -35,7 +36,8 @@ describe('CockpitView', () => {
     const nextPhaseId = 'before-start'
     await wrapper.setProps({ activePhaseId: nextPhaseId })
 
-    const expected = getPhaseById(nextPhaseId)!.items.length
+    // bs3 has 0,0
+    const expected = getPhaseById(nextPhaseId)!.items.filter(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0).length
     expect(wrapper.findAll('.hotspot')).toHaveLength(expected)
   })
 
@@ -46,15 +48,42 @@ describe('CockpitView', () => {
     expect(wrapper.findAll('.hotspot')).toHaveLength(0)
   })
 
-  it('renders at least one hotspot for every shipped phase', () => {
+  it('renders at least one hotspot for every shipped phase (after filtering)', () => {
     // Guard rail: catches the case where a new phase ships with an empty
-    // items array. A flight student must never be presented with a blank
-    // cockpit.
+    // items array or all items filtered.
     for (const phase of flightChecklists) {
       const wrapper = mount(CockpitView, {
         props: { activePhaseId: phase.id, focusedItemId: null },
       })
       expect(wrapper.findAll('.hotspot').length).toBeGreaterThan(0)
     }
+  })
+
+  it('emits hotspot-click when a hotspot is clicked', async () => {
+    const wrapper = mount(CockpitView, {
+      props: { activePhaseId: flightChecklists[0].id, focusedItemId: null },
+    })
+
+    const firstValidItem = flightChecklists[0].items.find(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0)!
+    await wrapper.find('.hotspot').trigger('click')
+    expect(wrapper.emitted('hotspot-click')).toBeTruthy()
+    expect(wrapper.emitted('hotspot-click')![0]).toEqual([firstValidItem.id])
+  })
+
+  it('filters out hotspots with coordinates 0 or less', () => {
+    // Phase 'cockpit-prep' has cp1 with x:0, y:0
+    const phaseId = 'cockpit-prep'
+    const allItems = getPhaseById(phaseId)!.items
+    const expectedValidCount = allItems.filter(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0).length
+
+    const wrapper = mount(CockpitView, {
+      props: { activePhaseId: phaseId, focusedItemId: null },
+    })
+
+    const hotspots = wrapper.findAll('.hotspot')
+    expect(hotspots.length).toBe(expectedValidCount)
+    // Confirm cp1 is NOT rendered
+    const cp1 = hotspots.find(h => h.text().includes('Gear Pins'))
+    expect(cp1).toBeUndefined()
   })
 })

@@ -1,68 +1,78 @@
 <script setup lang="ts">
-/**
- * CockpitView — interactive cockpit photo with pan plus per-item
- * hotspots.
- *
- * Responsibilities:
- *   - Render the A320neo cockpit image.
- *   - Overlay a "hotspot" marker for every checklist item in the active flight
- *     phase.
- *   - Pan the image via click-and-drag, or toward a programmatically focused
- *     item when the parent requests one.
- *
- * Intentionally out of scope:
- *   - Which items are completed — owned by the parent (App.vue).
- *   - The checklist data itself — owned by `data/checklist.ts`.
- *
- * Pattern: presentational component using props-down / events-up. The parent
- * decides what phase and what item is focused; this component only renders.
- *
- * Acronyms introduced in this file:
- *   PFD = Primary Flight Display
- *   ND  = Navigation Display
- */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
-import { flightChecklists, getPhaseById, type ChecklistItem } from '../data/checklist';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
+import {
+  flightChecklists,
+  getPhaseById,
+  type ChecklistItem,
+} from "../data/checklist";
 
-// --- Props ------------------------------------------------------------------
-// `activePhaseId` selects which hotspots are shown.
-// `focusedItemId` triggers a programmatic pan/zoom toward that item.
 const props = defineProps<{
   activePhaseId: string;
   focusedItemId: string | null;
 }>();
 
-// --- Local state ------------------------------------------------------------
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 5;
+// Use 50% fixed increments for fast zooming as requested.
+const ZOOM_STEP = 0.5;
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, value));
+
 const cockpitRef = ref<HTMLElement | null>(null);
+const imageWrapperRef = ref<HTMLElement | null>(null);
+const imgRef = ref<HTMLImageElement | null>(null);
 
-// Pan position stored normalised (0..1) relative to the overflow region.
-// 0 = show left/top edge; 1 = show right/bottom edge. Normalising keeps the
-// pan math independent of viewport size and the focused-jump watch can write
-// directly to it regardless of current image scale.
-const mouseX = ref(0.5);
-const mouseY = ref(0.5);
+// Displayed image content box (inside the img element)
+const imageDisplayW = ref(0);
+const imageDisplayH = ref(0);
+const imageOffsetX = ref(0);
+const imageOffsetY = ref(0);
 
-// Item shown in the detail modal, or `null` when the modal is closed.
-const selectedItem = ref<ChecklistItem | null>(null);
+/**
+ * Measure the actual displayed image content inside the image-wrapper.
+ * Since we now always size the image to fill the scene width (fit-to-width),
+ * the display box matches the scaled dimensions without offsets.
+ */
+const computeImageBox = () => {
+  if (scaledW.value <= 0 || scaledH.value <= 0) {
+    imageDisplayW.value = 0;
+    imageDisplayH.value = 0;
+    imageOffsetX.value = 0;
+    imageOffsetY.value = 0;
+    return;
+  }
 
-// `true` while a programmatic "jump to item" transition is playing. Flipped
-// back to `false` by any user drag so the user can always regain free panning.
-const isFocused = ref(false);
-
-// Drives the crosshair overlay — only rendered while the cursor is inside.
-const isMouseInside = ref(false);
-
-// `true` while the user is holding the mouse button to drag. Drives the
-// grabbing cursor and gates the window-level mousemove handler.
-const isDragging = ref(false);
-
-// Runtime viewport and image-natural dimensions. Needed to compute the
-// cover-fit scale (no fixed 1.5× multiplier any more). Kept in refs so the
-// computed pan style recomputes when either the container or the image loads.
+  imageDisplayW.value = scaledW.value;
+  imageDisplayH.value = scaledH.value;
+  imageOffsetX.value = 0;
+  imageOffsetY.value = 0;
+};
 const viewportW = ref(0);
 const viewportH = ref(0);
 const imageNaturalW = ref(0);
 const imageNaturalH = ref(0);
+const zoom = ref(1);
+const selectedItem = ref<ChecklistItem | null>(null);
+const isMouseInside = ref(false);
+const isDragging = ref(false);
+const isFocused = ref(false);
+
+const emit = defineEmits<{
+  (e: "hotspot-click", id: string): void;
+}>();
+
+const items = computed<ChecklistItem[]>(() => {
+  const allItems = getPhaseById(props.activePhaseId)?.items ?? [];
+  return allItems.filter((item) => (item.x ?? 0) > 0 && (item.y ?? 0) > 0);
+});
 
 const updateViewportSize = () => {
   if (!cockpitRef.value) return;
@@ -75,142 +85,276 @@ const onImageLoad = (event: Event) => {
   const img = event.target as HTMLImageElement;
   imageNaturalW.value = img.naturalWidth;
   imageNaturalH.value = img.naturalHeight;
-  // Re-measure on load: the initial onMounted read can fire before the
-  // browser has a final layout (e.g. fonts, sidebar width). Keeps pan math
-  // correct on first frame.
   updateViewportSize();
+  nextTick().then(() => computeImageBox());
 };
 
 let resizeObserver: ResizeObserver | null = null;
 onMounted(() => {
   updateViewportSize();
-  if (cockpitRef.value && typeof ResizeObserver !== 'undefined') {
-    resizeObserver = new ResizeObserver(updateViewportSize);
+  if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) {
+    imageNaturalW.value = imgRef.value.naturalWidth;
+    imageNaturalH.value = imgRef.value.naturalHeight;
+    nextTick().then(() => computeImageBox());
+  }
+
+  if (cockpitRef.value && typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(() => {
+      updateViewportSize();
+      computeImageBox();
+    });
     resizeObserver.observe(cockpitRef.value);
+    if (imageWrapperRef.value) resizeObserver.observe(imageWrapperRef.value);
   }
 });
+
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   resizeObserver = null;
-  // Detach window listeners if unmount happens mid-drag.
-  window.removeEventListener('mousemove', onWindowMouseMove);
-  window.removeEventListener('mouseup', onWindowMouseUp);
-  window.removeEventListener('mousemove', onDevToggleMouseMove);
-  window.removeEventListener('mouseup', onDevToggleMouseUp);
+  window.removeEventListener("mousemove", onWindowMouseMove);
+  window.removeEventListener("mouseup", onWindowMouseUp);
+  window.removeEventListener("mousemove", onDevToggleMouseMove);
+  window.removeEventListener("mouseup", onDevToggleMouseUp);
 });
 
-// --- Derived data -----------------------------------------------------------
-// Items for the current phase. Resolved via a helper so the lookup rule lives
-// in exactly one place (`data/checklist.ts`). `?? []` keeps `v-for` safe if
-// the parent ever passes an unknown phase id.
-const items = computed<ChecklistItem[]>(
-  () => getPhaseById(props.activePhaseId)?.items ?? [],
+const baseScale = computed(() => {
+  const iw = imageNaturalW.value;
+  if (iw <= 0) return 1;
+  const vw = viewportW.value > 0 ? viewportW.value : window.innerWidth;
+  // Use fit-to-width as the baseline for consistent initial load and smooth zoom.
+  return vw / iw;
+});
+
+const scaledW = computed(
+  () => imageNaturalW.value * baseScale.value * zoom.value,
+);
+const scaledH = computed(
+  () => imageNaturalH.value * baseScale.value * zoom.value,
 );
 
-// --- Drag panning -----------------------------------------------------------
-// Pan is driven by click-and-drag. Press records the anchor (pointer + pan
-// snapshot); movement translates pointer delta into normalised pan delta so
-// the dragged point stays pinned under the cursor. Window listeners (not
-// viewport listeners) ensure the drag continues if the cursor leaves the
-// viewport — standard behaviour for scrollable/draggable surfaces.
+const sceneStyle = computed(() => {
+  if (scaledW.value <= 0 || scaledH.value <= 0)
+    return { width: "100%", height: "100%" };
+
+  return {
+    width: `${Math.round(scaledW.value)}px`,
+    height: `${Math.round(scaledH.value)}px`,
+  };
+});
+
+const overlayTransitionClass = computed(() =>
+  isFocused.value ? "is-focused" : "",
+);
+
+const setViewportScroll = (
+  left: number,
+  top: number,
+  behavior: "auto" | "smooth" = "auto",
+) => {
+  if (!cockpitRef.value) return;
+  const maxLeft = Math.max(0, scaledW.value - viewportW.value);
+  const maxTop = Math.max(0, scaledH.value - viewportH.value);
+  const nextLeft = clamp(left, 0, maxLeft);
+  const nextTop = clamp(top, 0, maxTop);
+  if (
+    cockpitRef.value &&
+    typeof (cockpitRef.value as any).scrollTo === "function"
+  ) {
+    try {
+      (cockpitRef.value as any).scrollTo({
+        left: nextLeft,
+        top: nextTop,
+        behavior,
+      });
+    } catch {
+      cockpitRef.value.scrollLeft = nextLeft;
+      cockpitRef.value.scrollTop = nextTop;
+    }
+  } else {
+    cockpitRef.value.scrollLeft = nextLeft;
+    cockpitRef.value.scrollTop = nextTop;
+  }
+};
+
+const setZoom = async (nextZoom: number) => {
+  if (!cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0) {
+    zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    return;
+  }
+
+  const currentCenterX = cockpitRef.value.scrollLeft + viewportW.value / 2;
+  const currentCenterY = cockpitRef.value.scrollTop + viewportH.value / 2;
+  const widthRatio = currentCenterX / scaledW.value;
+  const heightRatio = currentCenterY / scaledH.value;
+
+  zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+  await nextTick();
+
+  const nextCenterX = widthRatio * scaledW.value;
+  const nextCenterY = heightRatio * scaledH.value;
+  setViewportScroll(
+    nextCenterX - viewportW.value / 2,
+    nextCenterY - viewportH.value / 2,
+  );
+};
+
+const zoomIn = async (event?: Event) => {
+  isFocused.value = false;
+  await setZoom(zoom.value + ZOOM_STEP);
+  try {
+    if (cockpitRef.value) {
+      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
+    }
+  } catch {}
+  try {
+    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
+  } catch {}
+};
+
+const zoomOut = async (event?: Event) => {
+  isFocused.value = false;
+  await setZoom(zoom.value - ZOOM_STEP);
+  try {
+    if (cockpitRef.value) {
+      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
+    }
+  } catch {}
+  try {
+    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
+  } catch {}
+};
+
+const resetZoom = async (event?: Event) => {
+  isFocused.value = false;
+  await setZoom(1);
+  try {
+    if (cockpitRef.value) {
+      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
+    }
+  } catch {}
+  try {
+    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
+  } catch {}
+};
+
 let dragStartX = 0;
 let dragStartY = 0;
-let dragStartMouseX = 0;
-let dragStartMouseY = 0;
-// Tracks whether the press turned into a real drag (moved past the threshold).
-// Used to suppress the follow-up click — otherwise a drag that ends on top of
-// the image wrapper would fire `logPosition`.
+let dragStartLeft = 0;
+let dragStartTop = 0;
 let didDrag = false;
 const DRAG_THRESHOLD_PX = 3;
 
 const onWindowMouseMove = (event: MouseEvent) => {
-  if (!isDragging.value) return;
-  const overflowX = Math.max(0, scaledW.value - viewportW.value);
-  const overflowY = Math.max(0, scaledH.value - viewportH.value);
+  if (!isDragging.value || !cockpitRef.value) return;
   const dx = event.clientX - dragStartX;
   const dy = event.clientY - dragStartY;
-  if (!didDrag && (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX)) {
+  if (
+    !didDrag &&
+    (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX)
+  ) {
     didDrag = true;
   }
-  // Dragging right reveals content on the left — pan position decreases.
-  // Division by overflow maps pixel delta into normalised space; when the
-  // image exactly fits (overflow = 0) the axis is pinned.
-  const nx = overflowX > 0 ? dragStartMouseX - dx / overflowX : dragStartMouseX;
-  const ny = overflowY > 0 ? dragStartMouseY - dy / overflowY : dragStartMouseY;
-  mouseX.value = Math.max(0, Math.min(1, nx));
-  mouseY.value = Math.max(0, Math.min(1, ny));
+  setViewportScroll(dragStartLeft - dx, dragStartTop - dy);
 };
 
 const onWindowMouseUp = () => {
   if (!isDragging.value) return;
   isDragging.value = false;
-  window.removeEventListener('mousemove', onWindowMouseMove);
-  window.removeEventListener('mouseup', onWindowMouseUp);
+  window.removeEventListener("mousemove", onWindowMouseMove);
+  window.removeEventListener("mouseup", onWindowMouseUp);
 };
 
 const onMouseDown = (event: MouseEvent) => {
-  // Only the primary button initiates a drag. Right-click / middle-click
-  // should fall through to native behaviour.
-  if (event.button !== 0) return;
-  // Hotspots and the modal own their own click semantics; do not start a
-  // drag on top of them.
+  if (event.button !== 0 || !cockpitRef.value) return;
   const target = event.target as HTMLElement | null;
-  if (target?.closest('.hotspot, .modal-overlay, .dev-toggle, .dev-panel')) return;
+  if (
+    target?.closest(
+      ".hotspot, .modal-overlay, .dev-toggle, .dev-panel, .zoom-controls",
+    )
+  )
+    return;
 
   isDragging.value = true;
+  isFocused.value = false;
   didDrag = false;
   dragStartX = event.clientX;
   dragStartY = event.clientY;
-  dragStartMouseX = mouseX.value;
-  dragStartMouseY = mouseY.value;
-  // Any user drag cancels the "focused item" lock so the user can regain
-  // free panning from wherever the jump landed.
-  isFocused.value = false;
-  window.addEventListener('mousemove', onWindowMouseMove);
-  window.addEventListener('mouseup', onWindowMouseUp);
-  // Prevent browser image/text drag from hijacking the gesture.
+  dragStartLeft = cockpitRef.value.scrollLeft;
+  dragStartTop = cockpitRef.value.scrollTop;
+  window.addEventListener("mousemove", onWindowMouseMove);
+  window.addEventListener("mouseup", onWindowMouseUp);
   event.preventDefault();
 };
 
-const handleMouseEnter = () => { isMouseInside.value = true; };
-const handleMouseLeave = () => { isMouseInside.value = false; };
+let initialPinchDistance = 0;
+let initialZoom = 1;
 
-// --- Programmatic focus (jump to a checklist item) --------------------------
-// When the parent sets `focusedItemId`, look up the item in the current phase
-// and snap the pan coordinates to its stored (x, y) percentage. `isFocused`
-// switches the CSS transition to a slower curve so the user's eye can follow
-// the move.
+const getPinchDistance = (event: TouchEvent) => {
+  const t1 = event.touches[0];
+  const t2 = event.touches[1];
+  return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+};
+
+const onTouchStart = (event: TouchEvent) => {
+  if (event.touches.length === 2) {
+    initialPinchDistance = getPinchDistance(event);
+    initialZoom = zoom.value;
+  }
+};
+
+const onTouchMove = async (event: TouchEvent) => {
+  if (event.touches.length === 2) {
+    // Prevent default browser zoom/scroll while pinching
+    if (event.cancelable) event.preventDefault();
+
+    const currentDistance = getPinchDistance(event);
+    if (initialPinchDistance > 0) {
+      const scale = currentDistance / initialPinchDistance;
+      const nextZoom = initialZoom * scale;
+      await setZoom(nextZoom);
+    }
+  }
+};
+
+const handleMouseEnter = () => {
+  isMouseInside.value = true;
+};
+const handleMouseLeave = () => {
+  isMouseInside.value = false;
+};
+
+const onHotspotClick = (item: ChecklistItem) => {
+  selectedItem.value = item;
+  emit("hotspot-click", item.id);
+};
+
 watch(
   () => props.focusedItemId,
-  (id) => {
-    if (!id) return;
-    const item = items.value.find((i) => i.id === id);
-    if (item?.x !== undefined && item.y !== undefined) {
-      mouseX.value = item.x / 100;
-      mouseY.value = item.y / 100;
-      isFocused.value = true;
-      selectedItem.value = item;
-    }
+  async (id) => {
+    if (!id || !cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0)
+      return;
+    const item = items.value.find((candidate) => candidate.id === id);
+    if (!item || item.x === undefined || item.y === undefined) return;
+
+    selectedItem.value = item;
+    isFocused.value = true;
+
+    const targetLeft = (item.x / 100) * scaledW.value - viewportW.value / 2;
+    const targetTop = (item.y / 100) * scaledH.value - viewportH.value / 2;
+    await nextTick();
+    setViewportScroll(targetLeft, targetTop, "smooth");
   },
 );
 
-// --- Dev helper -------------------------------------------------------------
-// Logs the clicked (x, y) in percent. Handy when authoring new hotspots —
-// click the physical switch, copy the coordinates into `checklist.ts`.
-//
-// In dev mode the same click, instead of logging, captures the coordinate
-// for the currently prompted checklist item and advances to the next one.
-const logPosition = (e: MouseEvent) => {
-  // A drag that ends on the image wrapper also fires `click`; ignore those
-  // so the dev helper only logs genuine taps.
-  if (didDrag) return;
-  if (!cockpitRef.value) return;
+const logPosition = (event: MouseEvent) => {
+  if (didDrag || !cockpitRef.value) return;
   const rect = cockpitRef.value
-    .querySelector('.image-wrapper')
+    .querySelector(".image-wrapper")
     ?.getBoundingClientRect();
   if (!rect) return;
-  const x = ((e.clientX - rect.left) / rect.width) * 100;
-  const y = ((e.clientY - rect.top) / rect.height) * 100;
+
+  const x = ((event.clientX - rect.left) / rect.width) * 100;
+  const y = ((event.clientY - rect.top) / rect.height) * 100;
 
   if (devMode.value) {
     const current = devItems.value[devIndex.value];
@@ -226,17 +370,11 @@ const logPosition = (e: MouseEvent) => {
   console.log(`Clicked at X: ${x.toFixed(2)}%, Y: ${y.toFixed(2)}%`);
 };
 
-// --- Dev mode ---------------------------------------------------------------
-// Sequential hotspot-capture workflow. Toggle on from the top-left button;
-// the panel names the next item to click. Each non-drag click on the image
-// captures (x, y) in percent for that item and advances to the next. Export
-// produces a JSON blob (copied to clipboard when available) that can be
-// pasted back into `checklist.ts`.
 const devMode = ref(false);
 const devIndex = ref(0);
 const devCaptured = ref<Record<string, { x: number; y: number }>>({});
 const devExportOpen = ref(false);
-const devExportText = ref('');
+const devExportText = ref("");
 
 interface DevItem extends ChecklistItem {
   phaseId: string;
@@ -270,11 +408,6 @@ const devSkip = () => {
   if (devIndex.value < devItems.value.length - 1) devIndex.value += 1;
 };
 
-// --- Dev toggle drag --------------------------------------------------------
-// The dev button can sit on top of a cockpit control the user wants to click,
-// so it's draggable. Position is tracked in viewport-pixel offsets from the
-// top-left. A press that moves past the threshold sets the drag flag and the
-// subsequent click is swallowed to avoid toggling dev mode accidentally.
 const devTogglePos = ref({ x: 12, y: 12 });
 let devToggleDragStart = { mx: 0, my: 0, bx: 0, by: 0 };
 let devToggleDidDrag = false;
@@ -292,8 +425,8 @@ const onDevToggleMouseMove = (event: MouseEvent) => {
 };
 
 const onDevToggleMouseUp = () => {
-  window.removeEventListener('mousemove', onDevToggleMouseMove);
-  window.removeEventListener('mouseup', onDevToggleMouseUp);
+  window.removeEventListener("mousemove", onDevToggleMouseMove);
+  window.removeEventListener("mouseup", onDevToggleMouseUp);
 };
 
 const onDevToggleMouseDown = (event: MouseEvent) => {
@@ -305,14 +438,12 @@ const onDevToggleMouseDown = (event: MouseEvent) => {
     bx: devTogglePos.value.x,
     by: devTogglePos.value.y,
   };
-  window.addEventListener('mousemove', onDevToggleMouseMove);
-  window.addEventListener('mouseup', onDevToggleMouseUp);
-  // Stop the press bubbling up to the viewport drag handler.
+  window.addEventListener("mousemove", onDevToggleMouseMove);
+  window.addEventListener("mouseup", onDevToggleMouseUp);
   event.stopPropagation();
 };
 
 const onDevToggleClick = (event: MouseEvent) => {
-  // Click tail of a drag: suppress toggle, consume the click.
   if (devToggleDidDrag) {
     devToggleDidDrag = false;
     event.preventDefault();
@@ -322,30 +453,15 @@ const onDevToggleClick = (event: MouseEvent) => {
   toggleDevMode();
 };
 
-// --- Wheel panning ----------------------------------------------------------
-// Scroll wheel / two-finger trackpad pan the image. deltaY maps to Y-axis by
-// default; Shift+wheel maps deltaY to X (standard browser convention for
-// horizontal scroll). Positive deltaY scrolls "down" → reveals content below
-// → pan position increases.
-const onWheel = (event: WheelEvent) => {
-  const overflowX = Math.max(0, scaledW.value - viewportW.value);
-  const overflowY = Math.max(0, scaledH.value - viewportH.value);
-  if (overflowX <= 0 && overflowY <= 0) return;
+const onWheel = async (event: WheelEvent) => {
+  if (!(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();
   isFocused.value = false;
-  const dx = event.shiftKey ? event.deltaY : event.deltaX;
-  const dy = event.shiftKey ? 0 : event.deltaY;
-  if (overflowX > 0 && dx !== 0) {
-    mouseX.value = Math.max(0, Math.min(1, mouseX.value + dx / overflowX));
-  }
-  if (overflowY > 0 && dy !== 0) {
-    mouseY.value = Math.max(0, Math.min(1, mouseY.value + dy / overflowY));
-  }
+  if (event.deltaY < 0) await setZoom(zoom.value + ZOOM_STEP);
+  if (event.deltaY > 0) await setZoom(zoom.value - ZOOM_STEP);
 };
 
 const devExport = async () => {
-  // Group captured coords back under their phase so the output mirrors the
-  // shape of `flightChecklists` and is easy to diff against the source.
   const grouped: Record<string, Record<string, { x: number; y: number }>> = {};
   for (const item of devItems.value) {
     const coord = devCaptured.value[item.id];
@@ -359,58 +475,39 @@ const devExport = async () => {
   try {
     await navigator.clipboard?.writeText(json);
   } catch {
-    // Clipboard may be unavailable (insecure context, denied permission).
-    // The textarea is the fallback — user can select-all and copy manually.
+    // Fallback remains the textarea.
   }
 };
 
-// --- Pan style --------------------------------------------------------------
-// Fixed display scale: the source asset is ~7K×12K so cover-fit renders it
-// tiny on most displays. Rendering at 0.5× natural keeps detail readable
-// while leaving room for pan.
-//
-//   scaled(W|H)   = natural(W|H) * IMAGE_SCALE
-//   overflow(X|Y) = scaled(W|H) - viewport(W|H)
-//     — hidden pixels available for panning. Negative means the image is
-//       smaller than the viewport in that axis and should be letterboxed
-//       (centered with no pan).
-//   pan(X|Y) = mouse(X|Y) * overflow(X|Y)    // if overflow > 0
-//            = overflow(X|Y) / 2              // else, centers the image
-//
-// Falls back to a passthrough style while image / viewport dimensions have
-// not yet been measured. Avoids a first-paint jump.
-const IMAGE_SCALE = 0.5;
+const hotspotStyle = (item: ChecklistItem) => {
+  const xPct = (item.x ?? 0) / 100;
+  const yPct = (item.y ?? 0) / 100;
 
-const scaledW = computed(() => imageNaturalW.value * IMAGE_SCALE);
-const scaledH = computed(() => imageNaturalH.value * IMAGE_SCALE);
+  // Since the image always fills the scene width, we can use scaled dimensions directly.
+  const dispW = scaledW.value;
+  const dispH = scaledH.value;
 
-const cockpitStyle = computed(() => {
-  const ready =
-    scaledW.value > 0 && scaledH.value > 0 &&
-    viewportW.value > 0 && viewportH.value > 0;
-  if (!ready) {
-    return {
-      width: '100%',
-      height: '100%',
-      transform: 'translate(0px, 0px)',
-      transition: 'transform 0.15s ease-out',
-    };
-  }
-  const overflowX = scaledW.value - viewportW.value;
-  const overflowY = scaledH.value - viewportH.value;
-  const panX = overflowX > 0 ? mouseX.value * overflowX : overflowX / 2;
-  const panY = overflowY > 0 ? mouseY.value * overflowY : overflowY / 2;
+  const leftPx = Math.round(xPct * dispW);
+  const topPx = Math.round(yPct * dispH);
+  return { left: `${leftPx}px`, top: `${topPx}px` };
+};
+
+const imgStyle = computed(() => {
+  if (scaledW.value <= 0 || scaledH.value <= 0)
+    return { width: "100%", height: "100%", objectPosition: "left top" };
+
   return {
-    width: `${scaledW.value}px`,
-    height: `${scaledH.value}px`,
-    transform: `translate(${-panX}px, ${-panY}px)`,
-    transition: isFocused.value
-      ? 'transform 1s cubic-bezier(0.4, 0, 0.2, 1)' // slower ease for programmatic jumps
-      : isDragging.value
-        ? 'none'                                    // 1:1 with cursor while dragging
-        : 'transform 0.15s ease-out',               // brief ease when settling
+    width: `${Math.round(scaledW.value)}px`,
+    height: `${Math.round(scaledH.value)}px`,
+    objectPosition: "left top",
   };
 });
+
+const devMarkerStyle = (coord: { x: number; y: number }) => {
+  const leftPx = ((coord.x ?? 0) / 100) * scaledW.value;
+  const topPx = ((coord.y ?? 0) / 100) * scaledH.value;
+  return { left: `${leftPx}px`, top: `${topPx}px` };
+};
 </script>
 
 <template>
@@ -419,61 +516,92 @@ const cockpitStyle = computed(() => {
     class="cockpit-viewport"
     :class="{ 'is-dragging': isDragging }"
     @mousedown="onMouseDown"
-    @wheel.prevent="onWheel"
+    @wheel="onWheel"
+    @touchstart="onTouchStart"
+    @touchmove="onTouchMove"
     @mouseenter="handleMouseEnter"
     @mouseleave="handleMouseLeave"
   >
     <div
-      class="cockpit-image-container"
-      :style="cockpitStyle"
+      class="cockpit-scene"
+      :class="overlayTransitionClass"
+      :style="sceneStyle"
     >
-      <div
-        class="image-wrapper"
-        @click="logPosition"
-      >
+      <div class="image-wrapper" ref="imageWrapperRef" @click="logPosition">
         <img
           src="../assets/A320neo-Cockpit.png"
           alt="A320neo Cockpit"
           class="cockpit-img"
+          :class="{ 'is-zoomed': zoom > 1 }"
+          ref="imgRef"
+          :style="imgStyle"
           @load="onImageLoad"
+        />
+
+        <div
+          class="hotspot-overlay"
+          :aria-label="devMode ? 'Dev Mode markers' : 'Checklist hotspots'"
         >
-
-        <!-- Hotspots: one marker per item in the active phase. Hidden in
-             dev mode so the capture click is not intercepted. -->
-        <template v-if="!devMode">
-          <div
-            v-for="item in items"
-            :key="item.id"
-            class="hotspot"
-            :class="{ active: focusedItemId === item.id }"
-            :style="{ left: item.x + '%', top: item.y + '%' }"
-            @click.stop="selectedItem = item"
-          >
-            <div class="hotspot-ring" />
-            <div class="hotspot-dot" />
-            <div class="hotspot-label">
-              {{ item.item }}
+          <template v-if="!devMode">
+            <div
+              v-for="item in items"
+              :key="item.id"
+              class="hotspot"
+              :class="{ active: focusedItemId === item.id }"
+              :style="hotspotStyle(item)"
+              @click.stop="onHotspotClick(item)"
+            >
+              <div class="hotspot-ring" />
+              <div class="hotspot-dot" />
+              <span class="hotspot-label">{{ item.item }}</span>
             </div>
-          </div>
-        </template>
+          </template>
 
-        <!-- Dev mode: preview markers for coords captured so far. Purely
-             visual — clicks fall through to the wrapper so users can
-             recapture an item by clicking a new spot. -->
-        <template v-if="devMode">
-          <div
-            v-for="[id, coord] in Object.entries(devCaptured)"
-            :key="id"
-            class="dev-marker"
-            :class="{ current: devCurrent?.id === id }"
-            :style="{ left: coord.x + '%', top: coord.y + '%' }"
-          />
-        </template>
+          <template v-if="devMode">
+            <div
+              v-for="[id, coord] in Object.entries(devCaptured)"
+              :key="id"
+              class="dev-marker-html"
+              :class="{ current: devCurrent?.id === id }"
+              :style="devMarkerStyle(coord)"
+            />
+          </template>
+        </div>
       </div>
     </div>
 
-    <!-- Dev mode toggle + guidance panel. Fixed to the viewport's top-left
-         so it stays visible while the user pans. -->
+    <div class="zoom-controls" role="group" aria-label="Zoom controls">
+      <button
+        type="button"
+        class="zoom-button"
+        aria-label="Zoom out"
+        :disabled="zoom <= MIN_ZOOM"
+        @mousedown.prevent
+        @click="zoomOut($event)"
+      >
+        -
+      </button>
+      <button
+        type="button"
+        class="zoom-button zoom-status"
+        aria-label="Reset zoom"
+        @mousedown.prevent
+        @click="resetZoom($event)"
+      >
+        {{ Math.round(zoom * 100) }}%
+      </button>
+      <button
+        type="button"
+        class="zoom-button"
+        aria-label="Zoom in"
+        :disabled="zoom >= MAX_ZOOM"
+        @mousedown.prevent
+        @click="zoomIn($event)"
+      >
+        +
+      </button>
+    </div>
+
     <button
       class="dev-toggle"
       :class="{ active: devMode }"
@@ -481,17 +609,11 @@ const cockpitStyle = computed(() => {
       @mousedown="onDevToggleMouseDown"
       @click="onDevToggleClick"
     >
-      {{ devMode ? 'Exit Dev' : 'Dev Mode' }}
+      {{ devMode ? "Exit Dev" : "Dev Mode" }}
     </button>
 
-    <div
-      v-if="devMode && devCurrent"
-      class="dev-panel"
-      @mousedown.stop
-    >
-      <div class="dev-progress">
-        {{ devIndex + 1 }} / {{ devItems.length }}
-      </div>
+    <div v-if="devMode && devCurrent" class="dev-panel" @mousedown.stop>
+      <div class="dev-progress">{{ devIndex + 1 }} / {{ devItems.length }}</div>
       <div class="dev-phase">
         {{ devCurrent.phaseLabel }}
       </div>
@@ -502,21 +624,9 @@ const cockpitStyle = computed(() => {
         {{ devCurrent.action }}
       </div>
       <div class="dev-buttons">
-        <button
-          :disabled="devIndex === 0"
-          @click="devPrev"
-        >
-          Prev
-        </button>
-        <button @click="devSkip">
-          Skip
-        </button>
-        <button
-          class="primary"
-          @click="devExport"
-        >
-          Export
-        </button>
+        <button :disabled="devIndex === 0" @click="devPrev">Prev</button>
+        <button @click="devSkip">Skip</button>
+        <button class="primary" @click="devExport">Export</button>
       </div>
       <textarea
         v-if="devExportOpen"
@@ -526,28 +636,16 @@ const cockpitStyle = computed(() => {
       />
     </div>
 
-    <div
-      v-if="isMouseInside && !devMode"
-      class="crosshair"
-    />
+    <div v-if="isMouseInside && !devMode" class="crosshair" />
 
-    <!-- Detail modal: shown when the user clicks a hotspot. -->
     <Transition name="fade">
       <div
         v-if="selectedItem"
         class="modal-overlay"
         @click="selectedItem = null"
       >
-        <div
-          class="modal-card"
-          @click.stop
-        >
-          <button
-            class="close-btn"
-            @click="selectedItem = null"
-          >
-            ×
-          </button>
+        <div class="modal-card" @click.stop>
+          <button class="close-btn" @click="selectedItem = null">×</button>
           <div class="panel-tag">
             {{ selectedItem.panel.toUpperCase() }}
           </div>
@@ -557,10 +655,7 @@ const cockpitStyle = computed(() => {
           </div>
           <p>{{ selectedItem.description }}</p>
           <div class="modal-footer">
-            <button
-              class="btn-primary"
-              @click="selectedItem = null"
-            >
+            <button class="btn-primary" @click="selectedItem = null">
               GOT IT
             </button>
           </div>
@@ -574,124 +669,200 @@ const cockpitStyle = computed(() => {
 .cockpit-viewport {
   width: 100%;
   height: 100%;
-  overflow: hidden;
-  background-color: #050505;
+  overflow: auto;
+  background:
+    radial-gradient(circle at top, rgba(47, 61, 73, 0.35), transparent 48%),
+    #050505;
   cursor: grab;
-  display: flex;
-  justify-content: center;
-  align-items: center;
   position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  touch-action: pan-x pan-y;
+  /* Prevent large gap at the bottom */
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.cockpit-viewport::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.cockpit-viewport::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
 }
 
 .cockpit-viewport.is-dragging {
   cursor: grabbing;
 }
 
-/*
- * Cover-fit pan container.
- *
- * Width/height come from `cockpitStyle` (the cover-scaled image dimensions
- * in pixels) so the image fills 100% of the viewport in both axes at 1×
- * with no additional CSS scaling. Transform is a translate() only — no
- * scale — and is applied from the top-left origin so pan math lines up
- * with `mouseX * overflowX`. Cursor is placed at (0,0) logically by
- * anchoring the transform origin at the same corner.
- */
-.cockpit-image-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  transform-origin: 0 0;
-  will-change: transform;
+.cockpit-scene {
+  position: relative;
+  /* Allow the scene size to be driven purely by the scaled image
+     dimensions. Prevent flex min-size behaviour from forcing the scene
+     to be at least the viewport width which creates letterbox gaps when
+     the scaled image is narrower than the viewport. */
+  min-width: 0;
+  min-height: 0;
+  flex: 0 0 auto;
 }
 
 .image-wrapper {
   position: relative;
   width: 100%;
   height: 100%;
+  /* Allow the image to overflow visually when explicitly sized (zoomed)
+     so the parent .cockpit-viewport can provide scrollbars. */
+  overflow: visible;
 }
 
 .cockpit-img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* Belt-and-braces: wrapper is already the cover size. */
+  /* Ensure the image aligns to the top-left so hotspots (pixel-calculated)
+     map correctly regardless of letterboxing/contain behavior */
+  object-position: left top;
   user-select: none;
   pointer-events: auto;
-  box-shadow: 0 0 100px rgba(0,0,0,0.8);
+  box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
+}
+
+.cockpit-img.is-zoomed {
+  /* Prevent downstream image constraints (e.g. max-width) from limiting
+     the visual zoom. */
+  max-width: none;
+  max-height: none;
+  /* Position absolutely within the wrapper so explicit pixel sizing will
+     overflow the wrapper and be scrolled by the viewport container. */
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.hotspot-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
 }
 
 .hotspot {
   position: absolute;
-  width: 30px;
-  height: 30px;
+  width: 8px;
+  height: 8px;
   transform: translate(-50%, -50%);
   cursor: pointer;
-  z-index: 10;
-}
-
-.hotspot.active .hotspot-ring {
-  border-color: #4CAF50;
-  border-width: 3px;
-}
-
-.hotspot.active .hotspot-dot {
-  background-color: #4CAF50;
+  pointer-events: auto;
 }
 
 .hotspot-ring {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  border: 2px solid rgba(255, 152, 0, 0.8);
+  inset: -6px;
+  border: 1.5px solid rgba(255, 152, 0, 0.85);
+  background: rgba(255, 152, 0, 0.1);
   border-radius: 50%;
   animation: pulse 2s infinite;
 }
 
 .hotspot-dot {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  background-color: #ff9800;
+  inset: 2px;
+  background: #ff9800;
   border-radius: 50%;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 10px #ff9800;
+  box-shadow: 0 0 8px rgba(255, 152, 0, 0.85);
+}
+
+.hotspot.active .hotspot-ring {
+  border-color: #4caf50;
+  background: rgba(76, 175, 80, 0.15);
+  border-width: 2px;
+}
+
+.hotspot.active .hotspot-dot {
+  background: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.85);
 }
 
 .hotspot-label {
   position: absolute;
-  top: 35px;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0,0,0,0.8);
-  color: white;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
+  margin-top: 8px;
   white-space: nowrap;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.2s ease;
   pointer-events: none;
+  text-shadow:
+    -1px -1px 0 rgba(0, 0, 0, 0.85),
+    1px -1px 0 rgba(0, 0, 0, 0.85),
+    -1px 1px 0 rgba(0, 0, 0, 0.85),
+    1px 1px 0 rgba(0, 0, 0, 0.85);
 }
 
-.hotspot:hover .hotspot-label {
+.hotspot:hover .hotspot-label,
+.hotspot.active .hotspot-label {
   opacity: 1;
 }
 
 @keyframes pulse {
-  0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
+  0% {
+    opacity: 1;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.8);
+  }
+}
+
+.zoom-controls {
+  position: sticky;
+  top: 12px;
+  right: 12px;
+  z-index: 140;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  width: fit-content;
+  align-self: flex-start;
+  margin-left: auto;
+}
+
+.zoom-button {
+  min-width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(15, 19, 24, 0.88);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.zoom-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.zoom-status {
+  min-width: 76px;
+  font-size: 13px;
 }
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.7);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -701,13 +872,13 @@ const cockpitStyle = computed(() => {
 
 .modal-card {
   background: #1a1e23;
-  width: 400px;
+  width: min(400px, calc(100vw - 32px));
   padding: 30px;
   border-radius: 12px;
   position: relative;
   border: 1px solid #444;
   color: #ddd;
-  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
 }
 
 .close-btn {
@@ -732,7 +903,11 @@ const cockpitStyle = computed(() => {
   letter-spacing: 1px;
 }
 
-h2 { margin: 0 0 10px 0; color: #fff; font-size: 22px; }
+h2 {
+  margin: 0 0 10px 0;
+  color: #fff;
+  font-size: 22px;
+}
 
 .action-required {
   color: #ff9800;
@@ -750,7 +925,11 @@ h2 { margin: 0 0 10px 0; color: #fff; font-size: 22px; }
   margin-left: 8px;
 }
 
-p { line-height: 1.6; font-size: 15px; color: #bbb; }
+p {
+  line-height: 1.6;
+  font-size: 15px;
+  color: #bbb;
+}
 
 .modal-footer {
   margin-top: 25px;
@@ -773,11 +952,17 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
   background: #f57c00;
 }
 
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
 
 .crosshair {
-  position: absolute;
+  position: sticky;
   top: 50%;
   left: 50%;
   width: 20px;
@@ -786,12 +971,11 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
+  z-index: 120;
 }
 
 .dev-toggle {
   position: absolute;
-  top: 12px;
-  left: 12px;
   z-index: 150;
   background: rgba(20, 24, 28, 0.9);
   color: #ff9800;
@@ -811,7 +995,7 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
 
 .dev-panel {
   position: absolute;
-  top: 52px;
+  top: 64px;
   left: 12px;
   z-index: 150;
   width: 260px;
@@ -831,14 +1015,18 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
 }
 
 .dev-phase {
-  color: #4CAF50;
+  color: #4caf50;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 4px;
 }
 
-.dev-item { color: #fff; font-weight: bold; margin-bottom: 4px; }
+.dev-item {
+  color: #fff;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
 
 .dev-action {
   color: #ff9800;
@@ -846,7 +1034,10 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
   margin-bottom: 10px;
 }
 
-.dev-buttons { display: flex; gap: 6px; }
+.dev-buttons {
+  display: flex;
+  gap: 6px;
+}
 
 .dev-buttons button {
   flex: 1;
@@ -885,32 +1076,56 @@ p { line-height: 1.6; font-size: 15px; color: #bbb; }
   box-sizing: border-box;
 }
 
-.dev-marker {
+.dev-marker-html {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  transform: translate(-50%, -50%);
-  border: 2px solid #4CAF50;
+  width: 4px;
+  height: 4px;
+  background: #4caf50;
+  border: 1px solid #fff;
   border-radius: 50%;
-  background: rgba(76, 175, 80, 0.3);
+  transform: translate(-50%, -50%);
   pointer-events: none;
-  z-index: 9;
 }
 
-.dev-marker.current {
-  border-color: #ff9800;
-  background: rgba(255, 152, 0, 0.4);
-  box-shadow: 0 0 12px #ff9800;
+.dev-marker-html.current {
+  background: #ff9800;
+  width: 6px;
+  height: 6px;
+  z-index: 2;
 }
 
 .cockpit-viewport::after {
-  content: '';
-  position: absolute;
-  top: 0;
+  content: "";
+  position: sticky;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.4) 100%);
+  top: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(
+    circle,
+    transparent 42%,
+    rgba(0, 0, 0, 0.38) 100%
+  );
   pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .zoom-controls {
+    top: 10px;
+    right: 10px;
+    gap: 6px;
+    margin-top: 10px;
+    margin-right: 10px;
+  }
+
+  .zoom-button {
+    min-width: 40px;
+    height: 40px;
+  }
+
+  .dev-panel {
+    width: min(260px, calc(100vw - 24px));
+  }
 }
 </style>

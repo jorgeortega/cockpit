@@ -30,7 +30,14 @@
 //   IMC      = Instrument Meteorological Conditions
 // ---------------------------------------------------------------------------
 
-export type PanelType = 'overhead' | 'glareshield' | 'instrument' | 'pedestal' | 'floor';
+export type PanelType =
+  | "overhead"
+  | "glareshield"
+  | "instrument"
+  | "pedestal"
+  | "floor"
+  | "exterior"
+  | "none";
 
 export interface ChecklistItem {
   id: string;
@@ -57,101 +64,416 @@ export interface FlightPhase {
 // render until real coords are set.
 export const flightChecklists: FlightPhase[] = [
   {
-    id: 'cockpit-prep',
-    label: 'Cockpit Preparation',
+    id: "cockpit-prep",
+    label: "Cockpit Preparation",
     items: [
-      { id: 'cp1', item: 'Gear Pins and Covers', action: 'Removed', panel: 'floor', x: 50, y: 50, description: 'Verify landing gear safety pins and engine inlet/pitot covers are removed and stowed.' },
-      { id: 'cp2', item: 'Fuel Quantity', action: '____ KG/LB', panel: 'instrument', x: 50, y: 50, description: 'Cross-check fuel on board against flight plan on the ECAM fuel page.' },
-      { id: 'cp3', item: 'Seat Belts', action: 'On', panel: 'overhead', x: 50, y: 50, description: 'Set Seat Belts sign to ON.' },
-      { id: 'cp4', item: 'ADIRS', action: 'NAV', panel: 'overhead', x: 50, y: 50, description: 'Set all three ADIRS rotary selectors to NAV.' },
-      { id: 'cp5', item: 'Baro Ref', action: '____ Set (Both)', panel: 'glareshield', x: 50, y: 50, description: 'Set QNH / STD on both FCU baro knobs per clearance.' },
+      {
+        id: "cp1",
+        item: "Gear Pins and Covers",
+        action: "Removed",
+        panel: "exterior",
+        x: 0,
+        y: 0,
+        description:
+          "Verify landing gear safety pins and engine inlet/pitot covers are removed and stowed.",
+      },
+      {
+        id: "cp2",
+        item: "Fuel Quantity",
+        action: "check ECAM flight plan",
+        panel: "instrument",
+        x: 45.98,
+        y: 62.32,
+        description:
+          "Cross-check fuel on board against flight plan on the ECAM fuel page.",
+      },
+      {
+        id: "cp3",
+        item: "Seat Belts",
+        action: "On",
+        panel: "overhead",
+        x: 51.87,
+        y: 50.65,
+        description: "Set Seat Belts sign to ON.",
+      },
+      {
+        id: "cp4",
+        item: "ADIRS",
+        action: "NAV",
+        panel: "overhead",
+        x: 31.01,
+        y: 33.28,
+        description: "Set all three ADIRS rotary selectors to NAV.",
+      },
+      {
+        id: "cp5",
+        item: "Baro Ref",
+        action: "QNH / STD (Both)",
+        panel: "glareshield",
+        x: 31.04,
+        y: 55.23,
+        description: "Set QNH / STD on both FCU baro knobs per clearance.",
+      },
     ],
   },
   {
-    id: 'before-start',
-    label: 'Before Start',
+    id: "before-start",
+    label: "Before Start",
     items: [
-      { id: 'bs1', item: 'Parking Brake', action: '____', panel: 'pedestal', x: 50, y: 50, description: 'Confirm parking brake state per ground crew instructions.' },
-      { id: 'bs2', item: 'T.O. Speeds & Thrust', action: '____ (Both)', panel: 'pedestal', x: 50, y: 50, description: 'Insert V-speeds and FLEX/TOGA thrust on the MCDU PERF TO page, both pilots.' },
-      { id: 'bs3', item: 'Windows', action: 'Closed (Both)', panel: 'overhead', x: 50, y: 50, description: 'Both cockpit windows closed and locked.' },
-      { id: 'bs4', item: 'Beacon', action: 'On', panel: 'overhead', x: 50, y: 50, description: 'Turn Beacon ON prior to pushback/start.' },
+      {
+        id: "bs1",
+        item: "Parking Brake",
+        action: "ground crew instructions",
+        panel: "pedestal",
+        x: 50.77,
+        y: 94.62,
+        description:
+          "Confirm parking brake state per ground crew instructions.",
+      },
+      {
+        id: "bs2",
+        item: "T.O. Speeds & Thrust",
+        action: "Set MCDU (Both)",
+        panel: "pedestal",
+        x: 41.01,
+        y: 73.35,
+        description:
+          "Insert V-speeds and FLEX/TOGA thrust on the MCDU PERF TO page, both pilots.",
+      },
+      {
+        id: "bs3",
+        item: "Windows",
+        action: "Closed (Both)",
+        panel: "overhead",
+        x: 0,
+        y: 0,
+        description: "Both cockpit windows closed and locked.",
+      },
+      {
+        id: "bs4",
+        item: "Beacon",
+        action: "On",
+        panel: "overhead",
+        x: 42.28,
+        y: 48.98,
+        description: "Turn Beacon ON prior to pushback/start.",
+      },
     ],
   },
   {
-    id: 'after-start',
-    label: 'After Start',
+    id: "after-start",
+    label: "After Start",
     items: [
-      { id: 'as1', item: 'Anti Ice', action: '____', panel: 'overhead', x: 50, y: 50, description: 'Set Engine and Wing Anti-Ice per conditions.' },
-      { id: 'as2', item: 'ECAM Status', action: 'Checked', panel: 'instrument', x: 50, y: 50, description: 'Review ECAM STATUS for any inop systems or cautions.' },
-      { id: 'as3', item: 'Pitch Trim', action: '____ %', panel: 'pedestal', x: 50, y: 50, description: 'Set takeoff pitch trim from the CG / TOW table.' },
-      { id: 'as4', item: 'Rudder Trim', action: 'Neutral', panel: 'pedestal', x: 50, y: 50, description: 'Rudder trim to neutral / zero.' },
+      {
+        id: "as1",
+        item: "Anti Ice",
+        action: "Set",
+        panel: "overhead",
+        x: 40.16,
+        y: 47,
+        description: "Set Engine and Wing Anti-Ice per conditions.",
+      },
+      {
+        id: "as2",
+        item: "ECAM Status",
+        action: "Checked",
+        panel: "instrument",
+        x: 50.09,
+        y: 59.45,
+        description: "Review ECAM STATUS for any inop systems or cautions.",
+      },
+      {
+        id: "as3",
+        item: "Pitch Trim",
+        action: "CG / TOW table",
+        panel: "pedestal",
+        x: 45.36,
+        y: 81.77,
+        description: "Set takeoff pitch trim from the CG / TOW table.",
+      },
+      {
+        id: "as4",
+        item: "Rudder Trim",
+        action: "Neutral",
+        panel: "pedestal",
+        x: 51.08,
+        y: 91.97,
+        description: "Rudder trim to neutral / zero.",
+      },
     ],
   },
   {
-    id: 'taxi',
-    label: 'Taxi',
+    id: "taxi",
+    label: "Taxi",
     items: [
-      { id: 'tx1', item: 'Flight Controls', action: 'Checked (Both)', panel: 'pedestal', x: 50, y: 50, description: 'Full and free sidestick / rudder movement, green indications on the ECAM F/CTL page.' },
-      { id: 'tx2', item: 'Flap Setting', action: 'CONF ____ (Both)', panel: 'pedestal', x: 50, y: 50, description: 'Set takeoff flap configuration on the flap lever; confirm on ECAM.' },
-      { id: 'tx3', item: 'Radar & Pred W/S', action: 'On & Auto', panel: 'pedestal', x: 50, y: 50, description: 'WXR ON and PRED W/S AUTO on the radar panel.' },
-      { id: 'tx4', item: 'ENG Mode Sel', action: '____', panel: 'overhead', x: 50, y: 50, description: 'Select NORM or IGN/START on the engine mode selector per conditions.' },
-      { id: 'tx5', item: 'ECAM Memo', action: 'TO No Blue', panel: 'instrument', x: 50, y: 50, description: 'TO memo complete — no blue items remaining: AUTO BRK MAX, SIGNS ON, CABIN READY, SPLRS ARM, FLAPS TO, TO CONFIRM NORM.' },
-      { id: 'tx6', item: 'Cabin', action: 'Ready', panel: 'instrument', x: 50, y: 50, description: 'Cabin crew ready confirmation received.' },
+      {
+        id: "tx1",
+        item: "Flight Controls",
+        action: "Checked (Both)",
+        panel: "pedestal",
+        x: 21.03,
+        y: 74.35,
+        description:
+          "Full and free sidestick / rudder movement, green indications on the ECAM F/CTL page.",
+      },
+      {
+        id: "tx2",
+        item: "Flap Setting",
+        action: "takeoff set (Both)",
+        panel: "pedestal",
+        x: 54.45,
+        y: 89,
+        description:
+          "Set takeoff flap configuration on the flap lever; confirm on ECAM.",
+      },
+      {
+        id: "tx3",
+        item: "Radar & Pred W/S",
+        action: "On & Auto",
+        panel: "pedestal",
+        x: 43.08,
+        y: 88.13,
+        description: "WXR ON and PRED W/S AUTO on the radar panel.",
+      },
+      {
+        id: "tx4",
+        item: "ENG Mode Sel",
+        action: "NORM or IGN/START",
+        panel: "overhead",
+        x: 49.91,
+        y: 87.8,
+        description:
+          "Select NORM or IGN/START on the engine mode selector per conditions.",
+      },
+      {
+        id: "tx5",
+        item: "ECAM Memo",
+        action: "TO No Blue",
+        panel: "instrument",
+        x: 46.04,
+        y: 59.43,
+        description:
+          "TO memo complete — no blue items remaining: AUTO BRK MAX, SIGNS ON, CABIN READY, SPLRS ARM, FLAPS TO, TO CONFIRM NORM.",
+      },
+      {
+        id: "tx6",
+        item: "Cabin",
+        action: "Ready",
+        panel: "none",
+        x: 0,
+        y: 0,
+        description: "Cabin crew ready confirmation received.",
+      },
     ],
   },
   {
-    id: 'line-up',
-    label: 'Line-Up',
+    id: "line-up",
+    label: "Line-Up",
     items: [
-      { id: 'lu1', item: 'T.O. RWY', action: '____ (Both)', panel: 'instrument', x: 50, y: 50, description: 'Confirm takeoff runway against PFD/ND on both sides.' },
-      { id: 'lu2', item: 'TCAS', action: '____', panel: 'pedestal', x: 50, y: 50, description: 'Set TCAS mode (e.g. TA/RA) on the ATC/TCAS panel.' },
-      { id: 'lu3', item: 'Packs 1 & 2', action: '____', panel: 'overhead', x: 50, y: 50, description: 'Set both air-conditioning packs per takeoff performance requirements.' },
+      {
+        id: "lu1",
+        item: "T.O. RWY",
+        action: "PFD/ND (Both)",
+        panel: "instrument",
+        x: 30.73,
+        y: 62.08,
+        description: "Confirm takeoff runway against PFD/ND on both sides.",
+      },
+      {
+        id: "lu2",
+        item: "TCAS",
+        action: "TA/RA",
+        panel: "pedestal",
+        x: 57.11,
+        y: 86.45,
+        description: "Set TCAS mode (e.g. TA/RA) on the ATC/TCAS panel.",
+      },
+      {
+        id: "lu3",
+        item: "Packs 1 & 2",
+        action: "Set",
+        panel: "overhead",
+        x: 41.41,
+        y: 43.37,
+        description:
+          "Set both air-conditioning packs per takeoff performance requirements.",
+      },
     ],
   },
   {
-    id: 'approach',
-    label: 'Approach',
+    id: "approach",
+    label: "Approach",
     items: [
-      { id: 'ap1', item: 'Baro Ref', action: '____ Set (Both)', panel: 'glareshield', x: 50, y: 50, description: 'Set destination QNH on both FCU baro knobs.' },
-      { id: 'ap2', item: 'Seat Belts', action: 'On', panel: 'overhead', x: 50, y: 50, description: 'Seat belt sign ON.' },
-      { id: 'ap3', item: 'Minimum', action: '____', panel: 'glareshield', x: 50, y: 50, description: 'Set MDA/DA minimum on the PFD.' },
-      { id: 'ap4', item: 'Auto Brake', action: '____', panel: 'pedestal', x: 50, y: 50, description: 'Arm LO / MED / HI autobrake per landing performance.' },
-      { id: 'ap5', item: 'ENG Mode Sel', action: 'As Rqrd', panel: 'overhead', x: 50, y: 50, description: 'Select IGN/START or NORM per weather conditions.' },
+      {
+        id: "ap1",
+        item: "Baro Ref",
+        action: "Set dest. QNH (Both)",
+        panel: "glareshield",
+        x: 31.04,
+        y: 55.23,
+        description: "Set destination QNH on both FCU baro knobs.",
+      },
+      {
+        id: "ap2",
+        item: "Seat Belts",
+        action: "On",
+        panel: "overhead",
+        x: 51.87,
+        y: 50.65,
+        description: "Seat belt sign ON.",
+      },
+      {
+        id: "ap3",
+        item: "Minimum",
+        action: "Set PFD",
+        panel: "instrument",
+        x: 30.73,
+        y: 62.08,
+        description: "Set MDA/DA minimum on the PFD.",
+      },
+      {
+        id: "ap4",
+        item: "Auto Brake",
+        action: "Arm",
+        panel: "pedestal",
+        x: 58.89,
+        y: 60.99,
+        description: "Arm LO / MED / HI autobrake per landing performance.",
+      },
+      {
+        id: "ap5",
+        item: "ENG Mode Sel",
+        action: "As Rqrd",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Select IGN/START or NORM per weather conditions.",
+      },
     ],
   },
   {
-    id: 'landing',
-    label: 'Landing',
+    id: "landing",
+    label: "Landing",
     items: [
-      { id: 'ld1', item: 'ECAM Memo', action: 'LDG No Blue', panel: 'instrument', x: 50, y: 50, description: 'Landing memo complete — no blue items remaining: LDG GEAR DN, SIGNS ON, CABIN READY, SPLRS ARM, FLAPS SET.' },
-      { id: 'ld2', item: 'Cabin', action: 'Ready', panel: 'instrument', x: 50, y: 50, description: 'Cabin crew ready for landing.' },
+      {
+        id: "ld1",
+        item: "ECAM Memo",
+        action: "LDG No Blue",
+        panel: "instrument",
+        x: 50,
+        y: 50,
+        description:
+          "Landing memo complete — no blue items remaining: LDG GEAR DN, SIGNS ON, CABIN READY, SPLRS ARM, FLAPS SET.",
+      },
+      {
+        id: "ld2",
+        item: "Cabin",
+        action: "Ready",
+        panel: "none",
+        x: 0,
+        y: 0,
+        description: "Cabin crew ready for landing.",
+      },
     ],
   },
   {
-    id: 'after-landing',
-    label: 'After Landing',
+    id: "after-landing",
+    label: "After Landing",
     items: [
-      { id: 'al1', item: 'Radar & Pred W/S', action: 'Off', panel: 'pedestal', x: 50, y: 50, description: 'WXR and PRED W/S OFF after clearing the runway.' },
+      {
+        id: "al1",
+        item: "Radar & Pred W/S",
+        action: "Off",
+        panel: "pedestal",
+        x: 43.08,
+        y: 88.13,
+        description: "WXR and PRED W/S OFF after clearing the runway.",
+      },
     ],
   },
   {
-    id: 'parking',
-    label: 'Parking',
+    id: "parking",
+    label: "Parking",
     items: [
-      { id: 'pk1', item: 'Park BRK or Chocks', action: 'Set', panel: 'pedestal', x: 50, y: 50, description: 'Parking brake applied or wheel chocks confirmed in place.' },
-      { id: 'pk2', item: 'Engines', action: 'Off', panel: 'pedestal', x: 50, y: 50, description: 'Both ENG master switches OFF.' },
-      { id: 'pk3', item: 'Wings Light', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'Wing inspection light OFF.' },
-      { id: 'pk4', item: 'Fuel Pumps', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'All fuel pumps OFF.' },
-      { id: 'pk5', item: 'Yellow Elec Pump', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'Yellow electric hydraulic pump OFF.' },
+      {
+        id: "pk1",
+        item: "Park BRK or Chocks",
+        action: "Set",
+        panel: "pedestal",
+        x: 50.77,
+        y: 94.62,
+        description:
+          "Parking brake applied or wheel chocks confirmed in place.",
+      },
+      {
+        id: "pk2",
+        item: "Engines",
+        action: "Off",
+        panel: "pedestal",
+        x: 50,
+        y: 50,
+        description: "Both ENG master switches OFF.",
+      },
+      {
+        id: "pk3",
+        item: "Wings Light",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Wing inspection light OFF.",
+      },
+      {
+        id: "pk4",
+        item: "Fuel Pumps",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "All fuel pumps OFF.",
+      },
+      {
+        id: "pk5",
+        item: "Yellow Elec Pump",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Yellow electric hydraulic pump OFF.",
+      },
     ],
   },
   {
-    id: 'securing',
-    label: 'Securing the Aircraft',
+    id: "securing",
+    label: "Securing the Aircraft",
     items: [
-      { id: 'sa1', item: 'Oxygen', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'Crew oxygen supply OFF.' },
-      { id: 'sa2', item: 'Emer Exit Lt', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'Emergency exit lights OFF.' },
-      { id: 'sa3', item: 'Batteries', action: 'Off', panel: 'overhead', x: 50, y: 50, description: 'Both batteries OFF.' },
+      {
+        id: "sa1",
+        item: "Oxygen",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Crew oxygen supply OFF.",
+      },
+      {
+        id: "sa2",
+        item: "Emer Exit Lt",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Emergency exit lights OFF.",
+      },
+      {
+        id: "sa3",
+        item: "Batteries",
+        action: "Off",
+        panel: "overhead",
+        x: 50,
+        y: 50,
+        description: "Both batteries OFF.",
+      },
     ],
   },
 ];
@@ -199,25 +521,25 @@ export const DEFAULT_PHASE_ID: string = flightChecklists[0].id;
 // in an `<abbr title="...">` tag on next render.
 // ---------------------------------------------------------------------------
 export const ACRONYMS: Record<string, string> = {
-  APU: 'Auxiliary Power Unit',
-  IRS: 'Inertial Reference System',
-  ADIRS: 'Air Data / Inertial Reference System',
-  ECAM: 'Electronic Centralized Aircraft Monitor',
-  PFD: 'Primary Flight Display',
-  ND: 'Navigation Display',
-  ILS: 'Instrument Landing System',
-  MDA: 'Minimum Descent Altitude',
-  DA: 'Decision Altitude',
-  TCAS: 'Traffic Collision Avoidance System',
-  FMS: 'Flight Management System',
-  FMC: 'Flight Management Computer',
-  TOGA: 'Take-Off / Go-Around (thrust detent)',
-  QRH: 'Quick Reference Handbook',
-  RTO: 'Rejected Take-Off',
-  IMC: 'Instrument Meteorological Conditions',
-  'TA/RA': 'Traffic Advisory / Resolution Advisory',
-  'PFD/ND': 'Primary Flight Display / Navigation Display',
-  'MDA/DA': 'Minimum Descent Altitude / Decision Altitude',
+  APU: "Auxiliary Power Unit",
+  IRS: "Inertial Reference System",
+  ADIRS: "Air Data / Inertial Reference System",
+  ECAM: "Electronic Centralized Aircraft Monitor",
+  PFD: "Primary Flight Display",
+  ND: "Navigation Display",
+  ILS: "Instrument Landing System",
+  MDA: "Minimum Descent Altitude",
+  DA: "Decision Altitude",
+  TCAS: "Traffic Collision Avoidance System",
+  FMS: "Flight Management System",
+  FMC: "Flight Management Computer",
+  TOGA: "Take-Off / Go-Around (thrust detent)",
+  QRH: "Quick Reference Handbook",
+  RTO: "Rejected Take-Off",
+  IMC: "Instrument Meteorological Conditions",
+  "TA/RA": "Traffic Advisory / Resolution Advisory",
+  "PFD/ND": "Primary Flight Display / Navigation Display",
+  "MDA/DA": "Minimum Descent Altitude / Decision Altitude",
 };
 
 /**
@@ -236,13 +558,13 @@ export interface TextSegment {
 // the "/" in "TA/RA") and joins with `|`. Longest-first order guarantees
 // that "MDA/DA" wins over "MDA" when both are eligible.
 const ACRONYM_PATTERN = new RegExp(
-  '(' +
+  "(" +
     Object.keys(ACRONYMS)
       .sort((a, b) => b.length - a.length)
-      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('|') +
-    ')',
-  'g',
+      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|") +
+    ")",
+  "g",
 );
 
 /**
@@ -267,7 +589,7 @@ export function expandAcronyms(source: string): TextSegment[] {
   const parts = source.split(ACRONYM_PATTERN);
   for (let i = 0; i < parts.length; i += 1) {
     const part = parts[i];
-    if (part === '') continue;
+    if (part === "") continue;
     const isAcronym = i % 2 === 1; // split() puts captures on odd indices.
     if (isAcronym) {
       out.push({ text: part, title: ACRONYMS[part] });
