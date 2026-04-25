@@ -43,6 +43,13 @@ describe('ChecklistPanel', () => {
     document.body.removeChild(mockEl)
   })
 
+  it('does nothing when scrollToId changes to null', async () => {
+    const wrapper = makeWrapper(new Set(), 'p1')
+    await wrapper.setProps({ scrollToId: null })
+    await nextTick()
+    // No error = pass (covers branch)
+  })
+
   it('renders one row per item in the active phase', () => {
     const wrapper = makeWrapper()
     const expected = getPhaseById(PHASE_ID)!.items.length

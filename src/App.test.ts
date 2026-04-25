@@ -164,6 +164,19 @@ describe('App', () => {
     ).toBe(true)
   })
 
+  it('opens the checklist drawer on mobile when a hotspot is clicked', async () => {
+    window.innerWidth = 390
+    const wrapper = mountApp()
+    await nextTick()
+
+    expect(wrapper.find('.checklist-section').classes()).not.toContain('open')
+
+    const cockpit = wrapper.findComponent(CockpitStub)
+    await cockpit.vm.$emit('hotspot-click', 'p1')
+
+    expect(wrapper.find('.checklist-section').classes()).toContain('open')
+  })
+
   it('isolates completion per phase — toggling in A does not affect B', async () => {
     const wrapper = mountApp()
     const checklist = wrapper.findComponent(ChecklistStub)

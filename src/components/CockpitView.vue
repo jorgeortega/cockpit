@@ -7,11 +7,7 @@ import {
   ref,
   watch,
 } from "vue";
-import {
-  flightChecklists,
-  getPhaseById,
-  type ChecklistItem,
-} from "../data/checklist";
+import { getPhaseById, type ChecklistItem } from "../data/checklist";
 
 const props = defineProps<{
   activePhaseId: string;
@@ -30,31 +26,6 @@ const cockpitRef = ref<HTMLElement | null>(null);
 const imageWrapperRef = ref<HTMLElement | null>(null);
 const imgRef = ref<HTMLImageElement | null>(null);
 
-// Displayed image content box (inside the img element)
-const imageDisplayW = ref(0);
-const imageDisplayH = ref(0);
-const imageOffsetX = ref(0);
-const imageOffsetY = ref(0);
-
-/**
- * Measure the actual displayed image content inside the image-wrapper.
- * Since we now always size the image to fill the scene width (fit-to-width),
- * the display box matches the scaled dimensions without offsets.
- */
-const computeImageBox = () => {
-  if (scaledW.value <= 0 || scaledH.value <= 0) {
-    imageDisplayW.value = 0;
-    imageDisplayH.value = 0;
-    imageOffsetX.value = 0;
-    imageOffsetY.value = 0;
-    return;
-  }
-
-  imageDisplayW.value = scaledW.value;
-  imageDisplayH.value = scaledH.value;
-  imageOffsetX.value = 0;
-  imageOffsetY.value = 0;
-};
 const viewportW = ref(0);
 const viewportH = ref(0);
 const imageNaturalW = ref(0);
@@ -86,7 +57,6 @@ const onImageLoad = (event: Event) => {
   imageNaturalW.value = img.naturalWidth;
   imageNaturalH.value = img.naturalHeight;
   updateViewportSize();
-  nextTick().then(() => computeImageBox());
 };
 
 let resizeObserver: ResizeObserver | null = null;
@@ -95,16 +65,13 @@ onMounted(() => {
   if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) {
     imageNaturalW.value = imgRef.value.naturalWidth;
     imageNaturalH.value = imgRef.value.naturalHeight;
-    nextTick().then(() => computeImageBox());
   }
 
   if (cockpitRef.value && typeof ResizeObserver !== "undefined") {
     resizeObserver = new ResizeObserver(() => {
       updateViewportSize();
-      computeImageBox();
     });
     resizeObserver.observe(cockpitRef.value);
-    if (imageWrapperRef.value) resizeObserver.observe(imageWrapperRef.value);
   }
 });
 
@@ -113,8 +80,6 @@ onBeforeUnmount(() => {
   resizeObserver = null;
   window.removeEventListener("mousemove", onWindowMouseMove);
   window.removeEventListener("mouseup", onWindowMouseUp);
-  window.removeEventListener("mousemove", onDevToggleMouseMove);
-  window.removeEventListener("mouseup", onDevToggleMouseUp);
 });
 
 const baseScale = computed(() => {
@@ -202,11 +167,6 @@ const zoomIn = async (event?: Event) => {
   isFocused.value = false;
   await setZoom(zoom.value + ZOOM_STEP);
   try {
-    if (cockpitRef.value) {
-      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
-    }
-  } catch {}
-  try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
   } catch {}
 };
@@ -215,11 +175,6 @@ const zoomOut = async (event?: Event) => {
   isFocused.value = false;
   await setZoom(zoom.value - ZOOM_STEP);
   try {
-    if (cockpitRef.value) {
-      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
-    }
-  } catch {}
-  try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
   } catch {}
 };
@@ -227,11 +182,6 @@ const zoomOut = async (event?: Event) => {
 const resetZoom = async (event?: Event) => {
   isFocused.value = false;
   await setZoom(1);
-  try {
-    if (cockpitRef.value) {
-      setViewportScroll(cockpitRef.value.scrollLeft, 0, "auto");
-    }
-  } catch {}
   try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
   } catch {}
@@ -357,100 +307,39 @@ const logPosition = (event: MouseEvent) => {
   const y = ((event.clientY - rect.top) / rect.height) * 100;
 
   if (devMode.value) {
-    const current = devItems.value[devIndex.value];
-    if (!current) return;
-    devCaptured.value = {
-      ...devCaptured.value,
-      [current.id]: { x: +x.toFixed(2), y: +y.toFixed(2) },
-    };
-    if (devIndex.value < devItems.value.length - 1) devIndex.value += 1;
+    devClickedCoord.value = { x: +x.toFixed(2), y: +y.toFixed(2) };
     return;
   }
 
-  console.log(`Clicked at X: ${x.toFixed(2)}%, Y: ${y.toFixed(2)}%`);
+  console.log(`Clicked at x: ${x.toFixed(2)}, y: ${y.toFixed(2)}`);
 };
 
 const devMode = ref(false);
-const devIndex = ref(0);
-const devCaptured = ref<Record<string, { x: number; y: number }>>({});
-const devExportOpen = ref(false);
-const devExportText = ref("");
+const devClickedCoord = ref<{ x: number; y: number } | null>(null);
 
-interface DevItem extends ChecklistItem {
-  phaseId: string;
-  phaseLabel: string;
-}
+const devClosestItem = computed(() => {
+  if (!devClickedCoord.value) return null;
+  const { x, y } = devClickedCoord.value;
 
-const devItems = computed<DevItem[]>(() =>
-  flightChecklists.flatMap((phase) =>
-    phase.items.map((item) => ({
-      ...item,
-      phaseId: phase.id,
-      phaseLabel: phase.label,
-    })),
-  ),
-);
+  let closest = null;
+  let minDistance = 1.0; // Ignore anything further than 1%
 
-const devCurrent = computed<DevItem | null>(
-  () => devItems.value[devIndex.value] ?? null,
-);
+  for (const item of items.value) {
+    if (item.x === undefined || item.y === undefined) continue;
+    const dx = x - item.x;
+    const dy = y - item.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closest = item;
+    }
+  }
+  return closest;
+});
 
 const toggleDevMode = () => {
   devMode.value = !devMode.value;
-  devExportOpen.value = false;
-};
-
-const devPrev = () => {
-  if (devIndex.value > 0) devIndex.value -= 1;
-};
-
-const devSkip = () => {
-  if (devIndex.value < devItems.value.length - 1) devIndex.value += 1;
-};
-
-const devTogglePos = ref({ x: 12, y: 12 });
-let devToggleDragStart = { mx: 0, my: 0, bx: 0, by: 0 };
-let devToggleDidDrag = false;
-
-const onDevToggleMouseMove = (event: MouseEvent) => {
-  const dx = event.clientX - devToggleDragStart.mx;
-  const dy = event.clientY - devToggleDragStart.my;
-  if (!devToggleDidDrag && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
-    devToggleDidDrag = true;
-  }
-  devTogglePos.value = {
-    x: devToggleDragStart.bx + dx,
-    y: devToggleDragStart.by + dy,
-  };
-};
-
-const onDevToggleMouseUp = () => {
-  window.removeEventListener("mousemove", onDevToggleMouseMove);
-  window.removeEventListener("mouseup", onDevToggleMouseUp);
-};
-
-const onDevToggleMouseDown = (event: MouseEvent) => {
-  if (event.button !== 0) return;
-  devToggleDidDrag = false;
-  devToggleDragStart = {
-    mx: event.clientX,
-    my: event.clientY,
-    bx: devTogglePos.value.x,
-    by: devTogglePos.value.y,
-  };
-  window.addEventListener("mousemove", onDevToggleMouseMove);
-  window.addEventListener("mouseup", onDevToggleMouseUp);
-  event.stopPropagation();
-};
-
-const onDevToggleClick = (event: MouseEvent) => {
-  if (devToggleDidDrag) {
-    devToggleDidDrag = false;
-    event.preventDefault();
-    event.stopPropagation();
-    return;
-  }
-  toggleDevMode();
+  devClickedCoord.value = null;
 };
 
 const onWheel = async (event: WheelEvent) => {
@@ -459,24 +348,6 @@ const onWheel = async (event: WheelEvent) => {
   isFocused.value = false;
   if (event.deltaY < 0) await setZoom(zoom.value + ZOOM_STEP);
   if (event.deltaY > 0) await setZoom(zoom.value - ZOOM_STEP);
-};
-
-const devExport = async () => {
-  const grouped: Record<string, Record<string, { x: number; y: number }>> = {};
-  for (const item of devItems.value) {
-    const coord = devCaptured.value[item.id];
-    if (!coord) continue;
-    if (!grouped[item.phaseId]) grouped[item.phaseId] = {};
-    grouped[item.phaseId][item.id] = coord;
-  }
-  const json = JSON.stringify(grouped, null, 2);
-  devExportText.value = json;
-  devExportOpen.value = true;
-  try {
-    await navigator.clipboard?.writeText(json);
-  } catch {
-    // Fallback remains the textarea.
-  }
 };
 
 const hotspotStyle = (item: ChecklistItem) => {
@@ -502,74 +373,61 @@ const imgStyle = computed(() => {
     objectPosition: "left top",
   };
 });
-
-const devMarkerStyle = (coord: { x: number; y: number }) => {
-  const leftPx = ((coord.x ?? 0) / 100) * scaledW.value;
-  const topPx = ((coord.y ?? 0) / 100) * scaledH.value;
-  return { left: `${leftPx}px`, top: `${topPx}px` };
-};
 </script>
 
 <template>
-  <div
-    ref="cockpitRef"
-    class="cockpit-viewport"
-    :class="{ 'is-dragging': isDragging }"
-    @mousedown="onMouseDown"
-    @wheel="onWheel"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
-    @mouseenter="handleMouseEnter"
-    @mouseleave="handleMouseLeave"
-  >
+  <div class="cockpit-container">
     <div
-      class="cockpit-scene"
-      :class="overlayTransitionClass"
-      :style="sceneStyle"
+      ref="cockpitRef"
+      class="cockpit-viewport"
+      :class="{ 'is-dragging': isDragging }"
+      @mousedown="onMouseDown"
+      @wheel="onWheel"
+      @touchstart="onTouchStart"
+      @touchmove="onTouchMove"
+      @mouseenter="handleMouseEnter"
+      @mouseleave="handleMouseLeave"
     >
-      <div class="image-wrapper" ref="imageWrapperRef" @click="logPosition">
-        <img
-          src="../assets/A320neo-Cockpit.png"
-          alt="A320neo Cockpit"
-          class="cockpit-img"
-          :class="{ 'is-zoomed': zoom > 1 }"
-          ref="imgRef"
-          :style="imgStyle"
-          @load="onImageLoad"
-        />
+      <div
+        class="cockpit-scene"
+        :class="overlayTransitionClass"
+        :style="sceneStyle"
+      >
+        <div class="image-wrapper" ref="imageWrapperRef" @click="logPosition">
+          <img
+            src="../assets/A320neo-Cockpit.png"
+            alt="A320neo Cockpit"
+            class="cockpit-img"
+            :class="{ 'is-zoomed': zoom > 1 }"
+            ref="imgRef"
+            :style="imgStyle"
+            @load="onImageLoad"
+          />
 
-        <div
-          class="hotspot-overlay"
-          :aria-label="devMode ? 'Dev Mode markers' : 'Checklist hotspots'"
-        >
-          <template v-if="!devMode">
-            <div
-              v-for="item in items"
-              :key="item.id"
-              class="hotspot"
-              :class="{ active: focusedItemId === item.id }"
-              :style="hotspotStyle(item)"
-              @click.stop="onHotspotClick(item)"
-            >
-              <div class="hotspot-ring" />
-              <div class="hotspot-dot" />
-              <span class="hotspot-label">{{ item.item }}</span>
-            </div>
-          </template>
-
-          <template v-if="devMode">
-            <div
-              v-for="[id, coord] in Object.entries(devCaptured)"
-              :key="id"
-              class="dev-marker-html"
-              :class="{ current: devCurrent?.id === id }"
-              :style="devMarkerStyle(coord)"
-            />
-          </template>
+          <div
+            class="hotspot-overlay"
+            :aria-label="devMode ? 'Dev Mode markers' : 'Checklist hotspots'"
+          >
+            <template v-if="!devMode">
+              <div
+                v-for="item in items"
+                :key="item.id"
+                class="hotspot"
+                :class="{ active: focusedItemId === item.id }"
+                :style="hotspotStyle(item)"
+                @click.stop="onHotspotClick(item)"
+              >
+                <div class="hotspot-ring" />
+                <div class="hotspot-dot" />
+                <span class="hotspot-label">{{ item.item }}</span>
+              </div>
+            </template>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- UI Overlays (Fixed relative to the container) -->
     <div class="zoom-controls" role="group" aria-label="Zoom controls">
       <button
         type="button"
@@ -605,35 +463,19 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
     <button
       class="dev-toggle"
       :class="{ active: devMode }"
-      :style="{ left: devTogglePos.x + 'px', top: devTogglePos.y + 'px' }"
-      @mousedown="onDevToggleMouseDown"
-      @click="onDevToggleClick"
+      @click="toggleDevMode"
     >
       {{ devMode ? "Exit Dev" : "Dev Mode" }}
     </button>
 
-    <div v-if="devMode && devCurrent" class="dev-panel" @mousedown.stop>
-      <div class="dev-progress">{{ devIndex + 1 }} / {{ devItems.length }}</div>
-      <div class="dev-phase">
-        {{ devCurrent.phaseLabel }}
-      </div>
+    <div v-if="devMode && devClickedCoord" class="dev-panel" @mousedown.stop>
       <div class="dev-item">
-        {{ devCurrent.item }}
+        Clicked: x: {{ devClickedCoord.x }}, y: {{ devClickedCoord.y }}
       </div>
-      <div class="dev-action">
-        {{ devCurrent.action }}
+      <div v-if="devClosestItem" class="dev-action">
+        Closest: {{ devClosestItem.item }} ({{ devClosestItem.id }})
       </div>
-      <div class="dev-buttons">
-        <button :disabled="devIndex === 0" @click="devPrev">Prev</button>
-        <button @click="devSkip">Skip</button>
-        <button class="primary" @click="devExport">Export</button>
-      </div>
-      <textarea
-        v-if="devExportOpen"
-        class="dev-export"
-        readonly
-        :value="devExportText"
-      />
+      <div v-else class="dev-progress">No item within 1% range</div>
     </div>
 
     <div v-if="isMouseInside && !devMode" class="crosshair" />
@@ -666,6 +508,13 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
 </template>
 
 <style scoped>
+.cockpit-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
 .cockpit-viewport {
   width: 100%;
   height: 100%;
@@ -678,7 +527,6 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   touch-action: pan-x pan-y;
-  /* Prevent large gap at the bottom */
   display: flex;
   align-items: flex-start;
   justify-content: flex-start;
@@ -700,10 +548,6 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
 
 .cockpit-scene {
   position: relative;
-  /* Allow the scene size to be driven purely by the scaled image
-     dimensions. Prevent flex min-size behaviour from forcing the scene
-     to be at least the viewport width which creates letterbox gaps when
-     the scaled image is narrower than the viewport. */
   min-width: 0;
   min-height: 0;
   flex: 0 0 auto;
@@ -713,8 +557,6 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
   position: relative;
   width: 100%;
   height: 100%;
-  /* Allow the image to overflow visually when explicitly sized (zoomed)
-     so the parent .cockpit-viewport can provide scrollbars. */
   overflow: visible;
 }
 
@@ -722,8 +564,6 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
   display: block;
   width: 100%;
   height: 100%;
-  /* Ensure the image aligns to the top-left so hotspots (pixel-calculated)
-     map correctly regardless of letterboxing/contain behavior */
   object-position: left top;
   user-select: none;
   pointer-events: auto;
@@ -731,12 +571,8 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
 }
 
 .cockpit-img.is-zoomed {
-  /* Prevent downstream image constraints (e.g. max-width) from limiting
-     the visual zoom. */
   max-width: none;
   max-height: none;
-  /* Position absolutely within the wrapper so explicit pixel sizing will
-     overflow the wrapper and be scrolled by the viewport container. */
   position: absolute;
   top: 0;
   left: 0;
@@ -824,16 +660,12 @@ const devMarkerStyle = (coord: { x: number; y: number }) => {
 }
 
 .zoom-controls {
-  position: sticky;
+  position: absolute;
   top: 12px;
   right: 12px;
   z-index: 140;
   display: flex;
-  justify-content: flex-end;
   gap: 8px;
-  width: fit-content;
-  align-self: flex-start;
-  margin-left: auto;
 }
 
 .zoom-button {
@@ -962,7 +794,7 @@ p {
 }
 
 .crosshair {
-  position: sticky;
+  position: absolute;
   top: 50%;
   left: 50%;
   width: 20px;
@@ -976,16 +808,20 @@ p {
 
 .dev-toggle {
   position: absolute;
+  bottom: 12px;
+  left: 12px;
   z-index: 150;
   background: rgba(20, 24, 28, 0.9);
   color: #ff9800;
   border: 1px solid #ff9800;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 4px 8px;
+  font-size: 10px;
   font-weight: bold;
   letter-spacing: 1px;
   border-radius: 4px;
   cursor: pointer;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
 }
 
 .dev-toggle.active {
@@ -995,7 +831,7 @@ p {
 
 .dev-panel {
   position: absolute;
-  top: 64px;
+  bottom: 48px;
   left: 12px;
   z-index: 150;
   width: 260px;
@@ -1005,6 +841,7 @@ p {
   padding: 12px;
   color: #ddd;
   font-size: 13px;
+  backdrop-filter: blur(10px);
 }
 
 .dev-progress {
@@ -1061,21 +898,6 @@ p {
   border-color: #ff9800;
 }
 
-.dev-export {
-  width: 100%;
-  height: 160px;
-  margin-top: 10px;
-  background: #0d0f11;
-  color: #9f9;
-  border: 1px solid #333;
-  border-radius: 4px;
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  padding: 6px;
-  resize: vertical;
-  box-sizing: border-box;
-}
-
 .dev-marker-html {
   position: absolute;
   width: 4px;
@@ -1094,20 +916,17 @@ p {
   z-index: 2;
 }
 
-.cockpit-viewport::after {
+.cockpit-container::after {
   content: "";
-  position: sticky;
-  left: 0;
-  top: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  inset: 0;
   background: radial-gradient(
     circle,
     transparent 42%,
     rgba(0, 0, 0, 0.38) 100%
   );
   pointer-events: none;
+  z-index: 100;
 }
 
 @media (max-width: 900px) {
@@ -1115,8 +934,6 @@ p {
     top: 10px;
     right: 10px;
     gap: 6px;
-    margin-top: 10px;
-    margin-right: 10px;
   }
 
   .zoom-button {
