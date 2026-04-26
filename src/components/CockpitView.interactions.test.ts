@@ -79,12 +79,12 @@ describe("CockpitView interactions", () => {
 
     // compute expected pixel positions based on scaled dimensions
     const naturalW = 4000;
-    const naturalH = 2000;
+    const _naturalH = 2000;
     const vw = 1000;
-    const vh = 1000;
+    const _vh = 1000;
     const baseScale = vw / naturalW;
     const expectedLeftPx = `${Math.round((firstValid.x / 100) * naturalW * baseScale)}px`;
-    const expectedTopPx = `${Math.round((firstValid.y / 100) * naturalH * baseScale)}px`;
+    const expectedTopPx = `${Math.round((firstValid.y / 100) * 2000 * baseScale)}px`;
 
     expect(hotspots[0].attributes("style")).toContain(
       `left: ${expectedLeftPx}`,
@@ -202,9 +202,9 @@ describe("CockpitView interactions", () => {
 
     // Calculate expected centre based on scaled size (naturalWidth * baseScale * zoom)
     const naturalW = 4000;
-    const naturalH = 2000;
+    const _naturalH = 2000;
     const vw = 1000;
-    const vh = 1000;
+    const _vh = 1000;
     const baseScale = vw / naturalW;
     const zoomFactor = 2; // after 2 clicks at 0.5 steps
     const scaledW = naturalW * baseScale * zoomFactor;
@@ -236,9 +236,9 @@ describe("CockpitView interactions", () => {
     const scene = wrapper.find(".cockpit-scene").element as HTMLElement;
     // compute expected width based on contain semantics
     const naturalW = 4000;
-    const naturalH = 2000;
+    const _naturalH = 2000;
     const vw = 1000;
-    const vh = 1000;
+    const _vh = 1000;
     const baseScale = vw / naturalW;
     const zoomFactor = 1.5; // one click (50% additive)
     const expectedWidth = `${naturalW * baseScale * zoomFactor}px`;

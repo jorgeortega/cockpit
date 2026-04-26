@@ -54,7 +54,6 @@ const activeCompleted = computed<Set<string>>(
 // Pan the cockpit to the requested item. Does not touch completion state.
 const handleFocusItem = (id: string) => {
   focusedItemId.value = id
-  if (isMobile.value) isChecklistOpen.value = false
 }
 
 // Switch flight phase. Clear any focused item so the next phase doesn't show
@@ -62,7 +61,6 @@ const handleFocusItem = (id: string) => {
 const handlePhaseChange = (phaseId: string) => {
   activePhaseId.value = phaseId
   focusedItemId.value = null
-  if (isMobile.value) isChecklistOpen.value = false
 }
 
 // Toggle completion for a single item in the current phase. Mutates the Map
@@ -130,6 +128,7 @@ onBeforeUnmount(() => {
       <CockpitView
         :focused-item-id="focusedItemId"
         :active-phase-id="activePhaseId"
+        :is-mobile="isMobile"
         @hotspot-click="handleCompleteItem"
       />
     </main>
@@ -142,7 +141,7 @@ onBeforeUnmount(() => {
       aria-controls="checklist-drawer"
       @click="toggleChecklist"
     >
-      {{ isChecklistOpen ? 'Hide Checklist' : 'Show Checklist' }}
+      {{ isChecklistOpen ? '▾' : '▴' }}
     </button>
 
     <div
@@ -204,11 +203,14 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 152, 0, 0.4);
   background: rgba(15, 19, 24, 0.92);
   color: #fff;
-  border-radius: 999px;
-  padding: 12px 16px;
-  font: inherit;
+  border-radius: 8px;
+  width: 56px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
   font-weight: 700;
-  letter-spacing: 0.02em;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
 }
 
@@ -216,7 +218,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  z-index: 60;
+  z-index: 45;
 }
 
 @media (max-width: 900px) {

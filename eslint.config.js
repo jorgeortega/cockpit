@@ -46,4 +46,11 @@ export default [
       'vue/multi-word-component-names': 'off',
     },
   },
+
+  {
+    files: ['**/*.test.ts', 'tests/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 ]

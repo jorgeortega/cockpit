@@ -12,12 +12,12 @@ import { getPhaseById, type ChecklistItem } from "../data/checklist";
 const props = defineProps<{
   activePhaseId: string;
   focusedItemId: string | null;
+  isMobile?: boolean;
 }>();
 
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 5;
-// Use 50% fixed increments for fast zooming as requested.
-const ZOOM_STEP = 0.5;
+const MAX_ZOOM = computed(() => (props.isMobile ? 20 : 5));
+const ZOOM_STEP = computed(() => (props.isMobile ? 1.5 : 0.5));
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -123,19 +123,21 @@ const setViewportScroll = (
   const nextTop = clamp(top, 0, maxTop);
   if (
     cockpitRef.value &&
-    typeof (cockpitRef.value as any).scrollTo === "function"
+    "scrollTo" in cockpitRef.value &&
+    typeof cockpitRef.value.scrollTo === "function"
   ) {
     try {
-      (cockpitRef.value as any).scrollTo({
+      cockpitRef.value.scrollTo({
         left: nextLeft,
         top: nextTop,
         behavior,
       });
     } catch {
+      // ignore
       cockpitRef.value.scrollLeft = nextLeft;
       cockpitRef.value.scrollTop = nextTop;
     }
-  } else {
+  } else if (cockpitRef.value) {
     cockpitRef.value.scrollLeft = nextLeft;
     cockpitRef.value.scrollTop = nextTop;
   }
@@ -143,7 +145,7 @@ const setViewportScroll = (
 
 const setZoom = async (nextZoom: number) => {
   if (!cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0) {
-    zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
     return;
   }
 
@@ -152,7 +154,7 @@ const setZoom = async (nextZoom: number) => {
   const widthRatio = currentCenterX / scaledW.value;
   const heightRatio = currentCenterY / scaledH.value;
 
-  zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+  zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
   await nextTick();
 
   const nextCenterX = widthRatio * scaledW.value;
@@ -165,18 +167,22 @@ const setZoom = async (nextZoom: number) => {
 
 const zoomIn = async (event?: Event) => {
   isFocused.value = false;
-  await setZoom(zoom.value + ZOOM_STEP);
+  await setZoom(zoom.value + ZOOM_STEP.value);
   try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {}
+  } catch {
+    // ignore
+  }
 };
 
 const zoomOut = async (event?: Event) => {
   isFocused.value = false;
-  await setZoom(zoom.value - ZOOM_STEP);
+  await setZoom(zoom.value - ZOOM_STEP.value);
   try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {}
+  } catch {
+    // ignore
+  }
 };
 
 const resetZoom = async (event?: Event) => {
@@ -184,7 +190,9 @@ const resetZoom = async (event?: Event) => {
   await setZoom(1);
   try {
     (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {}
+  } catch {
+    // ignore
+  }
 };
 
 let dragStartX = 0;
@@ -346,8 +354,8 @@ const onWheel = async (event: WheelEvent) => {
   if (!(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();
   isFocused.value = false;
-  if (event.deltaY < 0) await setZoom(zoom.value + ZOOM_STEP);
-  if (event.deltaY > 0) await setZoom(zoom.value - ZOOM_STEP);
+  if (event.deltaY < 0) await setZoom(zoom.value + ZOOM_STEP.value);
+  if (event.deltaY > 0) await setZoom(zoom.value - ZOOM_STEP.value);
 };
 
 const hotspotStyle = (item: ChecklistItem) => {
@@ -393,16 +401,20 @@ const imgStyle = computed(() => {
         :class="overlayTransitionClass"
         :style="sceneStyle"
       >
-        <div class="image-wrapper" ref="imageWrapperRef" @click="logPosition">
+        <div
+          ref="imageWrapperRef"
+          class="image-wrapper"
+          @click="logPosition"
+        >
           <img
+            ref="imgRef"
             src="../assets/A320neo-Cockpit.png"
             alt="A320neo Cockpit"
             class="cockpit-img"
             :class="{ 'is-zoomed': zoom > 1 }"
-            ref="imgRef"
             :style="imgStyle"
             @load="onImageLoad"
-          />
+          >
 
           <div
             class="hotspot-overlay"
@@ -428,7 +440,11 @@ const imgStyle = computed(() => {
     </div>
 
     <!-- UI Overlays (Fixed relative to the container) -->
-    <div class="zoom-controls" role="group" aria-label="Zoom controls">
+    <div
+      class="zoom-controls"
+      role="group"
+      aria-label="Zoom controls"
+    >
       <button
         type="button"
         class="zoom-button"
@@ -461,6 +477,7 @@ const imgStyle = computed(() => {
     </div>
 
     <button
+      v-if="!isMobile"
       class="dev-toggle"
       :class="{ active: devMode }"
       @click="toggleDevMode"
@@ -468,17 +485,32 @@ const imgStyle = computed(() => {
       {{ devMode ? "Exit Dev" : "Dev Mode" }}
     </button>
 
-    <div v-if="devMode && devClickedCoord" class="dev-panel" @mousedown.stop>
+    <div
+      v-if="devMode && devClickedCoord"
+      class="dev-panel"
+      @mousedown.stop
+    >
       <div class="dev-item">
         Clicked: x: {{ devClickedCoord.x }}, y: {{ devClickedCoord.y }}
       </div>
-      <div v-if="devClosestItem" class="dev-action">
+      <div
+        v-if="devClosestItem"
+        class="dev-action"
+      >
         Closest: {{ devClosestItem.item }} ({{ devClosestItem.id }})
       </div>
-      <div v-else class="dev-progress">No item within 1% range</div>
+      <div
+        v-else
+        class="dev-progress"
+      >
+        No item within 1% range
+      </div>
     </div>
 
-    <div v-if="isMouseInside && !devMode" class="crosshair" />
+    <div
+      v-if="isMouseInside && !devMode"
+      class="crosshair"
+    />
 
     <Transition name="fade">
       <div
@@ -486,8 +518,16 @@ const imgStyle = computed(() => {
         class="modal-overlay"
         @click="selectedItem = null"
       >
-        <div class="modal-card" @click.stop>
-          <button class="close-btn" @click="selectedItem = null">×</button>
+        <div
+          class="modal-card"
+          @click.stop
+        >
+          <button
+            class="close-btn"
+            @click="selectedItem = null"
+          >
+            ×
+          </button>
           <div class="panel-tag">
             {{ selectedItem.panel.toUpperCase() }}
           </div>
@@ -497,7 +537,10 @@ const imgStyle = computed(() => {
           </div>
           <p>{{ selectedItem.description }}</p>
           <div class="modal-footer">
-            <button class="btn-primary" @click="selectedItem = null">
+            <button
+              class="btn-primary"
+              @click="selectedItem = null"
+            >
               GOT IT
             </button>
           </div>

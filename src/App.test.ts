@@ -87,7 +87,7 @@ describe('App', () => {
     expect(wrapper.find('.checklist-section').classes()).toContain('open')
   })
 
-  it('updates focusedItemId when the checklist emits focus-item', async () => {
+  it('updates focusedItemId when the checklist emits focus-item and keeps drawer open', async () => {
     window.innerWidth = 390
     const wrapper = mountApp()
     await nextTick()
@@ -97,7 +97,7 @@ describe('App', () => {
     await checklist.vm.$emit('focus-item', 'p1')
 
     expect(wrapper.findComponent(CockpitStub).props('focusedItemId')).toBe('p1')
-    expect(wrapper.find('.checklist-section').classes()).not.toContain('open')
+    expect(wrapper.find('.checklist-section').classes()).toContain('open')
   })
 
   it('changes phase and clears any stale focused item on phase-change', async () => {
@@ -116,7 +116,7 @@ describe('App', () => {
     expect(wrapper.findComponent(ChecklistStub).props('activePhaseId')).toBe(nextPhase)
   })
 
-  it('closes the mobile drawer when the phase changes', async () => {
+  it('stays open on mobile when the phase changes', async () => {
     window.innerWidth = 390
     const wrapper = mountApp()
     await nextTick()
@@ -127,7 +127,7 @@ describe('App', () => {
 
     await checklist.vm.$emit('phase-change', flightChecklists[1].id)
 
-    expect(wrapper.find('.checklist-section').classes()).not.toContain('open')
+    expect(wrapper.find('.checklist-section').classes()).toContain('open')
   })
 
   it('toggle-item adds an id the first time and removes it the second time', async () => {

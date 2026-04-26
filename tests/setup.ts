@@ -19,7 +19,7 @@ if (typeof window.scrollTo !== 'function') {
 if (typeof HTMLElement !== 'undefined' && !HTMLElement.prototype.scrollTo) {
   // Provide a basic implementation that updates scrollLeft/scrollTop so
   // components that rely on element.scrollTo behave in tests.
-  // eslint-disable-next-line func-names
+   
   HTMLElement.prototype.scrollTo = function (options?: any) {
     if (options && typeof options === 'object') {
       if (typeof options.left === 'number') (this as any).scrollLeft = options.left;
