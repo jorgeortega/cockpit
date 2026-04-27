@@ -39,10 +39,10 @@ export class PersistenceRepository {
       if (!raw) return null;
       
       const parsed = JSON.parse(raw);
-      // We could add validation here, or reuse the validation from persistence.ts
       return parsed as PersistedState;
     } catch (e) {
-      console.warn('[PersistenceRepository] Failed to load/parse state from LocalStorage:', e);
+      console.warn('[PersistenceRepository] Failed to load/parse state from LocalStorage. Clearing storage.', e);
+      this.clear();
       return null;
     }
   }

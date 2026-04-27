@@ -21,15 +21,18 @@ import ChecklistPanel from "./components/ChecklistPanel.vue";
 import { DEFAULT_PHASE_ID } from "./data/checklist";
 import {
   deserialize,
-  loadState,
-  saveState,
   serialize,
 } from "./data/persistence";
+import { PersistenceRepository } from "./services/PersistenceRepository";
+
+// Initialize the repository for state management (Repository Pattern)
+const persistenceRepo = new PersistenceRepository();
+// Initialize the checklist service (Service/Singleton Pattern)
+const checklistService = ChecklistService.getInstance();
 
 // Seed from localStorage on boot so the user resumes exactly where they left
-// off. `loadState` returns `null` if nothing is saved or if the blob is
-// corrupt (already logged + cleared inside the helper).
-const saved = loadState();
+// off. `persistenceRepo.load()` returns `null` if nothing is saved.
+const saved = persistenceRepo.load();
 
 const activePhaseId = ref<string>(saved?.activePhaseId ?? DEFAULT_PHASE_ID);
 const focusedItemId = ref<string | null>(null);
@@ -37,12 +40,7 @@ const scrollToId = ref<string | null>(null);
 const isMobile = ref(false);
 const isChecklistOpen = ref(false);
 
-// Completion state keyed by phase id. A `Map<phaseId, Set<itemId>>` gives us:
-//   - O(1) lookup of the active phase's set.
-//   - Independent progress per phase without a cross-phase scan.
-//   - Easy per-phase reset (just `delete` the key).
-// The child only needs the Set for the active phase; we expose it via a
-// computed so the child stays oblivious to the Map structure.
+// Completion state keyed by phase id.
 const completedByPhase = ref<Map<string, Set<string>>>(
   saved ? deserialize(saved.completed) : new Map(),
 );
@@ -91,12 +89,9 @@ const handleCompleteItem = (id: string) => {
   if (isMobile.value) isChecklistOpen.value = true;
 };
 
-// Persist on any state change. Each toggle / phase switch reassigns the
-// reference (see `handleToggleItem` / `handlePhaseChange`), so a shallow
-// watch is enough — no `deep: true` required. The write is cheap (single
-// JSON.stringify of a small object), so no debouncing is warranted.
+// Persist on any state change.
 watch([activePhaseId, completedByPhase], () => {
-  saveState({
+  persistenceRepo.save({
     version: 2,
     activePhaseId: activePhaseId.value,
     completed: serialize(completedByPhase.value),
