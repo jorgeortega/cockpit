@@ -72,32 +72,28 @@ describe('App', () => {
     wrapper.unmount()
   })
 
-  it('shows the checklist in a closed mobile drawer that can be opened', async () => {
+  it('renders the checklist in mobile mode closed by default (no drawer button)', async () => {
     window.innerWidth = 390
     const wrapper = mountApp()
     await nextTick()
 
-    expect(wrapper.find('.drawer-toggle').exists()).toBe(true)
+    // Drawer control has been removed for mobile — swipe to open instead.
+    expect(wrapper.find('.drawer-toggle').exists()).toBe(false)
     expect(wrapper.find('.checklist-section').classes()).toContain('mobile')
     expect(wrapper.find('.checklist-section').classes()).not.toContain('open')
-
-    await wrapper.find('.drawer-toggle').trigger('click')
-
-    expect(wrapper.find('.drawer-toggle').attributes('aria-expanded')).toBe('true')
-    expect(wrapper.find('.checklist-section').classes()).toContain('open')
   })
 
-  it('updates focusedItemId when the checklist emits focus-item and keeps drawer open', async () => {
+  it('updates focusedItemId when the checklist emits focus-item (mobile) and does not auto-open', async () => {
     window.innerWidth = 390
     const wrapper = mountApp()
     await nextTick()
     const checklist = wrapper.findComponent(ChecklistStub)
 
-    await wrapper.find('.drawer-toggle').trigger('click')
     await checklist.vm.$emit('focus-item', 'p1')
 
     expect(wrapper.findComponent(CockpitStub).props('focusedItemId')).toBe('p1')
-    expect(wrapper.find('.checklist-section').classes()).toContain('open')
+    // Emitting focus from the checklist does not automatically open the sheet.
+    expect(wrapper.find('.checklist-section').classes()).not.toContain('open')
   })
 
   it('changes phase and clears any stale focused item on phase-change', async () => {
@@ -122,7 +118,9 @@ describe('App', () => {
     await nextTick()
     const checklist = wrapper.findComponent(ChecklistStub)
 
-    await wrapper.find('.drawer-toggle').trigger('click')
+    // Open via hotspot click (the cockpit opens the checklist on mobile)
+    const cockpit = wrapper.findComponent(CockpitStub)
+    await cockpit.vm.$emit('hotspot-click', 'p1')
     expect(wrapper.find('.checklist-section').classes()).toContain('open')
 
     await checklist.vm.$emit('phase-change', flightChecklists[1].id)

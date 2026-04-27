@@ -143,16 +143,38 @@ const setViewportScroll = (
   }
 };
 
-const setZoom = async (nextZoom: number) => {
+const setZoom = async (
+  nextZoom: number,
+  focal?: { clientX: number; clientY: number },
+) => {
+  // If we don't have a measured scene, just update zoom level clamped.
   if (!cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0) {
     zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
     return;
   }
 
-  const currentCenterX = cockpitRef.value.scrollLeft + viewportW.value / 2;
-  const currentCenterY = cockpitRef.value.scrollTop + viewportH.value / 2;
-  const widthRatio = currentCenterX / scaledW.value;
-  const heightRatio = currentCenterY / scaledH.value;
+  // Determine the focal ratios inside the scene so the focal point remains
+  // stationary while zooming. If no focal point provided, fall back to the
+  // current viewport centre behaviour.
+  let widthRatio: number;
+  let heightRatio: number;
+  try {
+    const rect = cockpitRef.value.getBoundingClientRect();
+    if (focal) {
+      const fx = focal.clientX - rect.left;
+      const fy = focal.clientY - rect.top;
+      widthRatio = clamp(fx / Math.max(1, rect.width), 0, 1);
+      heightRatio = clamp(fy / Math.max(1, rect.height), 0, 1);
+    } else {
+      const currentCenterX = cockpitRef.value.scrollLeft + viewportW.value / 2;
+      const currentCenterY = cockpitRef.value.scrollTop + viewportH.value / 2;
+      widthRatio = currentCenterX / scaledW.value;
+      heightRatio = currentCenterY / scaledH.value;
+    }
+  } catch {
+    widthRatio = 0.5;
+    heightRatio = 0.5;
+  }
 
   zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
   await nextTick();
@@ -253,10 +275,19 @@ const getPinchDistance = (event: TouchEvent) => {
   return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 };
 
+let pinchCenter: { clientX: number; clientY: number } | null = null;
+
 const onTouchStart = (event: TouchEvent) => {
   if (event.touches.length === 2) {
     initialPinchDistance = getPinchDistance(event);
     initialZoom = zoom.value;
+    // Compute the midpoint of the two touches to use as the focal point so the
+    // scene zooms toward the user's fingers instead of recentering elsewhere.
+    const t1 = event.touches[0];
+    const t2 = event.touches[1];
+    pinchCenter = { clientX: (t1.clientX + t2.clientX) / 2, clientY: (t1.clientY + t2.clientY) / 2 };
+  } else {
+    pinchCenter = null;
   }
 };
 
@@ -269,7 +300,8 @@ const onTouchMove = async (event: TouchEvent) => {
     if (initialPinchDistance > 0) {
       const scale = currentDistance / initialPinchDistance;
       const nextZoom = initialZoom * scale;
-      await setZoom(nextZoom);
+      // Use the stored pinch center so the zoom anchors to the fingers.
+      await setZoom(nextZoom, pinchCenter ?? undefined);
     }
   }
 };
@@ -441,6 +473,7 @@ const imgStyle = computed(() => {
 
     <!-- UI Overlays (Fixed relative to the container) -->
     <div
+      v-if="!isMobile"
       class="zoom-controls"
       role="group"
       aria-label="Zoom controls"

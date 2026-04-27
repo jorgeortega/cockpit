@@ -49,6 +49,8 @@ describe('ChecklistItemRow', () => {
     })
     await wrapper.trigger('click')
     expect(wrapper.emitted('toggle')).toEqual([[ITEM.id]])
+    // Focus is emitted after a short UI delay; wait for it in tests.
+    await new Promise((r) => setTimeout(r, 250))
     expect(wrapper.emitted('focus')).toEqual([[ITEM.id]])
   })
 

@@ -15,27 +15,27 @@
  * directly, which prevents the classic split-brain bug where two components
  * disagree about truth.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CockpitView from './components/CockpitView.vue'
-import ChecklistPanel from './components/ChecklistPanel.vue'
-import { DEFAULT_PHASE_ID } from './data/checklist'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import CockpitView from "./components/CockpitView.vue";
+import ChecklistPanel from "./components/ChecklistPanel.vue";
+import { DEFAULT_PHASE_ID } from "./data/checklist";
 import {
   deserialize,
   loadState,
   saveState,
   serialize,
-} from './data/persistence'
+} from "./data/persistence";
 
 // Seed from localStorage on boot so the user resumes exactly where they left
 // off. `loadState` returns `null` if nothing is saved or if the blob is
 // corrupt (already logged + cleared inside the helper).
-const saved = loadState()
+const saved = loadState();
 
-const activePhaseId = ref<string>(saved?.activePhaseId ?? DEFAULT_PHASE_ID)
-const focusedItemId = ref<string | null>(null)
-const scrollToId = ref<string | null>(null)
-const isMobile = ref(false)
-const isChecklistOpen = ref(false)
+const activePhaseId = ref<string>(saved?.activePhaseId ?? DEFAULT_PHASE_ID);
+const focusedItemId = ref<string | null>(null);
+const scrollToId = ref<string | null>(null);
+const isMobile = ref(false);
+const isChecklistOpen = ref(false);
 
 // Completion state keyed by phase id. A `Map<phaseId, Set<itemId>>` gives us:
 //   - O(1) lookup of the active phase's set.
@@ -45,51 +45,51 @@ const isChecklistOpen = ref(false)
 // computed so the child stays oblivious to the Map structure.
 const completedByPhase = ref<Map<string, Set<string>>>(
   saved ? deserialize(saved.completed) : new Map(),
-)
+);
 
 const activeCompleted = computed<Set<string>>(
   () => completedByPhase.value.get(activePhaseId.value) ?? new Set(),
-)
+);
 
 // Pan the cockpit to the requested item. Does not touch completion state.
 const handleFocusItem = (id: string) => {
-  focusedItemId.value = id
-}
+  focusedItemId.value = id;
+};
 
 // Switch flight phase. Clear any focused item so the next phase doesn't show
 // a stale "jump" animation carried over from the previous phase's items.
 const handlePhaseChange = (phaseId: string) => {
-  activePhaseId.value = phaseId
-  focusedItemId.value = null
-}
+  activePhaseId.value = phaseId;
+  focusedItemId.value = null;
+};
 
 // Toggle completion for a single item in the current phase. Mutates the Map
 // then reassigns the ref so Vue picks up the change (reassignment is the
 // cheapest way to keep reactivity without a wrapping deep-watcher).
 const handleToggleItem = (id: string) => {
-  const next = new Map(completedByPhase.value)
-  const set = new Set(next.get(activePhaseId.value) ?? new Set<string>())
-  if (set.has(id)) set.delete(id)
-  else set.add(id)
-  next.set(activePhaseId.value, set)
-  completedByPhase.value = next
-}
+  const next = new Map(completedByPhase.value);
+  const set = new Set(next.get(activePhaseId.value) ?? new Set<string>());
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+  next.set(activePhaseId.value, set);
+  completedByPhase.value = next;
+};
 
 // Mark an item as complete idempotently (only adds, never removes). Triggered
 // when the user clicks a hotspot in the cockpit. Also triggers an auto-scroll
 // in the checklist panel.
 const handleCompleteItem = (id: string) => {
-  const next = new Map(completedByPhase.value)
-  const set = new Set(next.get(activePhaseId.value) ?? new Set<string>())
+  const next = new Map(completedByPhase.value);
+  const set = new Set(next.get(activePhaseId.value) ?? new Set<string>());
   if (!set.has(id)) {
-    set.add(id)
-    next.set(activePhaseId.value, set)
-    completedByPhase.value = next
+    set.add(id);
+    next.set(activePhaseId.value, set);
+    completedByPhase.value = next;
   }
-  scrollToId.value = id
-  focusedItemId.value = id
-  if (isMobile.value) isChecklistOpen.value = true
-}
+  scrollToId.value = id;
+  focusedItemId.value = id;
+  if (isMobile.value) isChecklistOpen.value = true;
+};
 
 // Persist on any state change. Each toggle / phase switch reassigns the
 // reference (see `handleToggleItem` / `handlePhaseChange`), so a shallow
@@ -100,31 +100,81 @@ watch([activePhaseId, completedByPhase], () => {
     version: 2,
     activePhaseId: activePhaseId.value,
     completed: serialize(completedByPhase.value),
-  })
-})
+  });
+});
 
 const syncViewportMode = () => {
-  isMobile.value = window.innerWidth <= 900
-  isChecklistOpen.value = !isMobile.value
-}
+  isMobile.value = window.innerWidth <= 900;
+  isChecklistOpen.value = !isMobile.value;
+};
 
-const toggleChecklist = () => {
-  isChecklistOpen.value = !isChecklistOpen.value
-}
+// Touch swipe handling: single-finger vertical swipes open/close the mobile
+// checklist. Two-finger gestures (pinch) are handled inside CockpitView so
+// these handlers ignore multi-touch.
+let touchStartY = 0;
+let touchActive = false;
+const SWIPE_THRESHOLD = 60; // pixels
+
+const onCockpitTouchStart = (e: TouchEvent) => {
+  if (!isMobile.value) return;
+  if (e.touches.length !== 1) return;
+  touchStartY = e.touches[0].clientY;
+  touchActive = true;
+};
+
+const onCockpitTouchMove = (e: TouchEvent) => {
+  if (!isMobile.value || !touchActive) return;
+  if (e.touches.length !== 1) return;
+  const dy = touchStartY - e.touches[0].clientY;
+  if (dy > SWIPE_THRESHOLD) {
+    isChecklistOpen.value = true;
+    touchActive = false;
+  }
+};
+
+const onCockpitTouchEnd = () => {
+  touchActive = false;
+};
+
+const onChecklistTouchStart = (e: TouchEvent) => {
+  if (!isMobile.value) return;
+  if (e.touches.length !== 1) return;
+  touchStartY = e.touches[0].clientY;
+  touchActive = true;
+};
+
+const onChecklistTouchMove = (e: TouchEvent) => {
+  if (!isMobile.value || !touchActive) return;
+  if (e.touches.length !== 1) return;
+  const dy = e.touches[0].clientY - touchStartY;
+  if (dy > SWIPE_THRESHOLD) {
+    isChecklistOpen.value = false;
+    touchActive = false;
+  }
+};
+
+const onChecklistTouchEnd = () => {
+  touchActive = false;
+};
 
 onMounted(() => {
-  syncViewportMode()
-  window.addEventListener('resize', syncViewportMode)
-})
+  syncViewportMode();
+  window.addEventListener("resize", syncViewportMode);
+});
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', syncViewportMode)
-})
+  window.removeEventListener("resize", syncViewportMode);
+});
 </script>
 
 <template>
   <div class="app-layout">
-    <main class="cockpit-section">
+    <main
+      class="cockpit-section"
+      @touchstart="onCockpitTouchStart"
+      @touchmove="onCockpitTouchMove"
+      @touchend="onCockpitTouchEnd"
+    >
       <CockpitView
         :focused-item-id="focusedItemId"
         :active-phase-id="activePhaseId"
@@ -133,27 +183,13 @@ onBeforeUnmount(() => {
       />
     </main>
 
-    <button
-      v-if="isMobile"
-      type="button"
-      class="drawer-toggle"
-      :aria-expanded="isChecklistOpen ? 'true' : 'false'"
-      aria-controls="checklist-drawer"
-      @click="toggleChecklist"
-    >
-      {{ isChecklistOpen ? '▾' : '▴' }}
-    </button>
-
-    <div
-      v-if="isMobile && isChecklistOpen"
-      class="drawer-backdrop"
-      @click="toggleChecklist"
-    />
-
     <aside
       id="checklist-drawer"
       class="checklist-section"
       :class="{ mobile: isMobile, open: isChecklistOpen }"
+      @touchstart="onChecklistTouchStart"
+      @touchmove="onChecklistTouchMove"
+      @touchend="onChecklistTouchEnd"
     >
       <ChecklistPanel
         :active-phase-id="activePhaseId"

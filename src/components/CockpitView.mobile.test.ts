@@ -24,10 +24,10 @@ const loadImage = async (
 describe("CockpitView mobile zoom", () => {
   it("uses 150% increments and supports 2000% zoom when isMobile is true", async () => {
     const wrapper = mount(CockpitView, {
-      props: { 
-        activePhaseId: "cockpit-prep", 
+      props: {
+        activePhaseId: "cockpit-prep",
         focusedItemId: null,
-        isMobile: true 
+        isMobile: true,
       },
       attachTo: document.body,
     });
@@ -35,27 +35,27 @@ describe("CockpitView mobile zoom", () => {
     await loadImage(wrapper, 4000, 2000);
 
     // Initial zoom 100%
-    expect(wrapper.find(".zoom-status").text()).toBe("100%");
+    expect(Math.round((wrapper.vm as any).zoom * 100)).toBe(100);
 
-    // First click should go to 250% (increment is 150% on mobile)
-    await wrapper.find('[aria-label="Zoom in"]').trigger("click");
+    // Use the zoom API (controls are hidden on mobile)
+    await (wrapper.vm as any).zoomIn();
     await nextTick();
-    expect(wrapper.find(".zoom-status").text()).toBe("250%");
+    expect(Math.round((wrapper.vm as any).zoom * 100)).toBe(250);
 
     // Land on 1000% exactly (6 clicks total: 1 + 6*1.5 = 10)
     for (let i = 0; i < 5; i++) {
-        await wrapper.find('[aria-label="Zoom in"]').trigger("click");
-        await nextTick();
+      await (wrapper.vm as any).zoomIn();
+      await nextTick();
     }
-    expect(wrapper.find(".zoom-status").text()).toBe("1000%");
+    expect(Math.round((wrapper.vm as any).zoom * 100)).toBe(1000);
 
-    // Should be able to go up to 2000%
-    while (wrapper.find('[aria-label="Zoom in"]').attributes("disabled") === undefined) {
-        await wrapper.find('[aria-label="Zoom in"]').trigger("click");
-        await nextTick();
+    // Should be able to go up to 2000% (zoom value 20)
+    while ((wrapper.vm as any).zoom < 20) {
+      await (wrapper.vm as any).zoomIn();
+      await nextTick();
     }
-    expect(wrapper.find(".zoom-status").text()).toBe("2000%");
-    
+    expect(Math.round((wrapper.vm as any).zoom * 100)).toBe(2000);
+
     wrapper.unmount();
   });
 

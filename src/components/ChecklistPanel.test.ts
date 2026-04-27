@@ -80,6 +80,9 @@ describe('ChecklistPanel', () => {
 
     await wrapper.findAll('.checklist-item')[0].trigger('click')
 
+    // focus-item is emitted after a UI delay mirroring the cockpit focus timing
+    await new Promise((r) => setTimeout(r, 250))
+
     const events = wrapper.emitted('focus-item')
     expect(events).toBeTruthy()
     expect(events![0]).toEqual([firstItemId])
