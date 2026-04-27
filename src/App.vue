@@ -15,20 +15,30 @@
  * directly, which prevents the classic split-brain bug where two components
  * disagree about truth.
  */
+/**
+ * CS Note: The "Single Source of Truth" & Unidirectional Data Flow
+ *
+ * App.vue acts as the "Orchestrator". In complex systems, having multiple
+ * components own the same state leads to "Split-Brain" bugs where UI
+ * elements disagree about reality.
+ *
+ * Instead, we:
+ * 1. Lift state up to the common ancestor (App.vue).
+ * 2. Pass state down via Props (Read-Only).
+ * 3. Bubble changes up via Events (Emits).
+ *
+ * This ensures data flows in one direction, making the system
+ * predictable and easier to debug.
+ */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import CockpitView from "./components/CockpitView.vue";
 import ChecklistPanel from "./components/ChecklistPanel.vue";
 import { DEFAULT_PHASE_ID } from "./data/checklist";
-import {
-  deserialize,
-  serialize,
-} from "./data/persistence";
+import { deserialize, serialize } from "./data/persistence";
 import { PersistenceRepository } from "./services/PersistenceRepository";
 
 // Initialize the repository for state management (Repository Pattern)
 const persistenceRepo = new PersistenceRepository();
-// Initialize the checklist service (Service/Singleton Pattern)
-const checklistService = ChecklistService.getInstance();
 
 // Seed from localStorage on boot so the user resumes exactly where they left
 // off. `persistenceRepo.load()` returns `null` if nothing is saved.

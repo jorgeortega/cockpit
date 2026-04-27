@@ -56,7 +56,7 @@ describe("CockpitView interactions", () => {
 
   it("renders the hotspot layer as HTML elements positioned by checklist coordinates", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -95,7 +95,7 @@ describe("CockpitView interactions", () => {
 
   it("pans by updating the viewport scroll position during drag", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -142,7 +142,7 @@ describe("CockpitView interactions", () => {
 
   it("clamps drag scroll within the scrollable bounds", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -181,7 +181,7 @@ describe("CockpitView interactions", () => {
 
   it("centres the focused item by scrolling the viewport", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -220,7 +220,7 @@ describe("CockpitView interactions", () => {
 
   it("zooms in and out from the controls while preserving the viewport anchor", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -258,7 +258,7 @@ describe("CockpitView interactions", () => {
 
   it("supports ctrl-wheel zoom and ignores plain scrolling wheel events", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -285,7 +285,7 @@ describe("CockpitView interactions", () => {
 
   it("supports zooming back out with a meta-wheel gesture", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -311,7 +311,7 @@ describe("CockpitView interactions", () => {
 
   it("does not start a drag on a hotspot or zoom control", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -326,7 +326,7 @@ describe("CockpitView interactions", () => {
 
   it("suppresses dev logging on the click that follows a drag", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -358,7 +358,7 @@ describe("CockpitView interactions", () => {
 
   it("opens the modal when a hotspot is clicked", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -374,7 +374,7 @@ describe("CockpitView interactions", () => {
 
   it("shows the crosshair on hover and hides it in dev mode", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
     });
 
     await wrapper.find(".cockpit-viewport").trigger("mouseenter");
@@ -390,7 +390,7 @@ describe("CockpitView interactions", () => {
 
   it("supports dev mode coordinate capture and closest item detection", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -429,7 +429,7 @@ describe("CockpitView interactions", () => {
 
   it("logs click coordinates outside dev mode and closes the modal from the overlay and button", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -460,7 +460,7 @@ describe("CockpitView interactions", () => {
 
   it("updates zoom before the image is measured and supports zooming back out", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
     });
 
     expect(
@@ -478,7 +478,7 @@ describe("CockpitView interactions", () => {
 
   it("ignores non-primary presses and unknown focus ids", async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
@@ -512,7 +512,7 @@ describe("CockpitView interactions", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
     });
 
     expect(ResizeObserverMock).toHaveBeenCalled();
@@ -529,7 +529,7 @@ describe("CockpitView interactions", () => {
     vi.stubGlobal("ResizeObserver", undefined);
 
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: "cockpit-prep", focusedItemId: null },
+      props: { activePhaseId: "cockpit-prep", focusedItemId: null, isMobile: false },
     });
 
     expect(wrapper.find(".cockpit-viewport").exists()).toBe(true);

@@ -1,6 +1,13 @@
 // ---------------------------------------------------------------------------
 // A320neo (Airbus A320 New Engine Option) flight-deck checklist data.
 //
+// CS Note: Domain Data Modeling
+// 
+// In large-scale applications, we separate RAW DATA (the Checklist) 
+// from the LOGIC that processes it. This file represents our 
+// "Static Data Source". By using TypeScript interfaces (FlightPhase, 
+// ChecklistItem), we ensure type safety across the entire codebase.
+//
 // Single source of truth for every flight phase the app recognises.
 // Exports:
 //   1. Domain types (PanelType, ChecklistItem, FlightPhase) — the shape.

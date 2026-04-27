@@ -22,8 +22,15 @@ async function pinchZoom(
   // fall back to constructing TouchEvents in the page context.
   let client: any = null;
   const contextAny = page.context() as any;
-  if (typeof contextAny.newCDPSession === 'function') {
-    client = await contextAny.newCDPSession(page);
+  if (typeof contextAny.newCDPSession === "function") {
+    try {
+      client = await contextAny.newCDPSession(page);
+      /* eslint-disable @typescript-eslint/no-unused-vars */
+    } catch (e) {
+      // Fall back to non-CDP implementation if CDP session fails
+      // (e.g. in non-chromium browsers or certain emulated contexts)
+      client = null;
+    }
   }
   const half = (d: number) => d / 2;
 

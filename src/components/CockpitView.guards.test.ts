@@ -5,7 +5,7 @@ import { DEFAULT_PHASE_ID } from '../data/checklist';
 
 describe('CockpitView guards and early returns', () => {
   it('handles null cockpitRef and non-primary mouse button safely', async () => {
-    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null } });
+    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false } });
 
     // Ensure updateViewportSize returns when cockpitRef is null
     wrapper.vm.cockpitRef = null;
@@ -28,7 +28,7 @@ describe('CockpitView guards and early returns', () => {
   });
 
   it('filters out checklist items with missing coordinates', async () => {
-    const wrapper = mount(CockpitView, { props: { activePhaseId: 'cockpit-prep', focusedItemId: null } });
+    const wrapper = mount(CockpitView, { props: { activePhaseId: 'cockpit-prep', focusedItemId: null, isMobile: false } });
     // items computed should exclude items with x/y <= 0 (cockpit-prep has such an item)
     const items = (wrapper.vm as any).items as any[];
     expect(items.every(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0)).toBe(true);

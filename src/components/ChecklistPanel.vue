@@ -3,6 +3,12 @@
  * ChecklistPanel — side panel listing checklist items for the active flight
  * phase, with a PhaseSelector at the top.
  *
+ * CS Note: Separation of Concerns (UI vs Logic)
+ * 
+ * This component is a "Pure Presentational Component". It doesn't know 
+ * HOW items are completed or HOW the phase changes; it only knows how 
+ * to render what it's given and notify the parent of user actions.
+ *
  * Pattern: pure presentational component. Props in, events out, no internal
  * state. A stateless component is:
  *   - Trivial to test — the output is a function of the props.

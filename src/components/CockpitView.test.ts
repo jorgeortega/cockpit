@@ -22,7 +22,7 @@ describe('CockpitView', () => {
     const expected = getPhaseById(phaseId)!.items.filter(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0).length
 
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: phaseId, focusedItemId: null },
+      props: { activePhaseId: phaseId, focusedItemId: null, isMobile: false },
     })
 
     expect(wrapper.findAll('.hotspot')).toHaveLength(expected)
@@ -30,7 +30,7 @@ describe('CockpitView', () => {
 
   it('re-renders hotspots when activePhaseId changes', async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: 'cockpit-prep', focusedItemId: null },
+      props: { activePhaseId: 'cockpit-prep', focusedItemId: null, isMobile: false },
     })
 
     const nextPhaseId = 'before-start'
@@ -43,7 +43,7 @@ describe('CockpitView', () => {
 
   it('renders zero hotspots if the phase id is unknown (graceful fallback)', () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: 'not-a-real-phase', focusedItemId: null },
+      props: { activePhaseId: 'not-a-real-phase', focusedItemId: null, isMobile: false },
     })
     expect(wrapper.findAll('.hotspot')).toHaveLength(0)
   })
@@ -53,7 +53,7 @@ describe('CockpitView', () => {
     // items array or all items filtered.
     for (const phase of flightChecklists) {
       const wrapper = mount(CockpitView, {
-        props: { activePhaseId: phase.id, focusedItemId: null },
+        props: { activePhaseId: phase.id, focusedItemId: null, isMobile: false },
       })
       expect(wrapper.findAll('.hotspot').length).toBeGreaterThan(0)
     }
@@ -61,7 +61,7 @@ describe('CockpitView', () => {
 
   it('emits hotspot-click when a hotspot is clicked', async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: flightChecklists[0].id, focusedItemId: null },
+      props: { activePhaseId: flightChecklists[0].id, focusedItemId: null, isMobile: false },
     })
 
     const firstValidItem = flightChecklists[0].items.find(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0)!
@@ -77,7 +77,7 @@ describe('CockpitView', () => {
     const expectedValidCount = allItems.filter(i => (i.x ?? 0) > 0 && (i.y ?? 0) > 0).length
 
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: phaseId, focusedItemId: null },
+      props: { activePhaseId: phaseId, focusedItemId: null, isMobile: false },
     })
 
     const hotspots = wrapper.findAll('.hotspot')

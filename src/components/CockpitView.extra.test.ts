@@ -5,7 +5,7 @@ import { DEFAULT_PHASE_ID } from '../data/checklist';
 
 describe('CockpitView extra branches', () => {
   it('calls setZoom fallback path when image natural size is zero', async () => {
-    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null } });
+    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false } });
 
     // Ensure scaledW/scaledH path where imageNaturalW/H are zero
     await (wrapper.vm as any).onImageLoad({ target: { naturalWidth: 0, naturalHeight: 0 } } as any);
@@ -20,7 +20,7 @@ describe('CockpitView extra branches', () => {
   });
 
   it('handles a focusedItemId that does not exist gracefully', async () => {
-    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null }, attachTo: document.body });
+    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false }, attachTo: document.body });
     // Stub bounding rect
     (wrapper.element as HTMLElement).getBoundingClientRect = () => ({ width: 800, height: 600, left: 0, top: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON() { return null; } });
     await (wrapper.vm as any).onImageLoad({ target: { naturalWidth: 800, naturalHeight: 600 } } as any);

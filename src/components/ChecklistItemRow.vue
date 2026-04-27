@@ -11,6 +11,13 @@
  * Accessibility: the row is exposed as a checkbox (role="checkbox" +
  * aria-checked) so assistive tech announces the complete/incomplete state.
  */
+/**
+ * CS Note: Atomic Design
+ * 
+ * This is an "Atom" component. It renders a single row of the checklist. 
+ * By keeping it tiny and focused, we make it highly reusable and 
+ * extremely easy to test.
+ */
 import { computed } from 'vue';
 import { expandAcronyms, type ChecklistItem } from '../data/checklist';
 

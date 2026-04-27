@@ -1,316 +1,89 @@
 <script setup lang="ts">
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
+  toRefs,
   watch,
 } from "vue";
-import { getPhaseById, type ChecklistItem } from "../data/checklist";
+import { ChecklistService } from "../services/ChecklistService";
+import { useCockpitViewport } from "../composables/useCockpitViewport";
+import HotspotMarker from "./HotspotMarker.vue";
+import ItemDetailModal from "./ItemDetailModal.vue";
+import CockpitDevTools from "./CockpitDevTools.vue";
+import { type ChecklistItem } from "../data/checklist";
 
 const props = defineProps<{
   activePhaseId: string;
   focusedItemId: string | null;
-  isMobile?: boolean;
+  isMobile: boolean;
 }>();
-
-const MIN_ZOOM = 1;
-const MAX_ZOOM = computed(() => (props.isMobile ? 20 : 5));
-const ZOOM_STEP = computed(() => (props.isMobile ? 1.5 : 0.5));
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
-
-const cockpitRef = ref<HTMLElement | null>(null);
-const imageWrapperRef = ref<HTMLElement | null>(null);
-const imgRef = ref<HTMLImageElement | null>(null);
-
-const viewportW = ref(0);
-const viewportH = ref(0);
-const imageNaturalW = ref(0);
-const imageNaturalH = ref(0);
-const zoom = ref(1);
-const selectedItem = ref<ChecklistItem | null>(null);
-const isMouseInside = ref(false);
-const isDragging = ref(false);
-const isFocused = ref(false);
 
 const emit = defineEmits<{
   (e: "hotspot-click", id: string): void;
 }>();
 
-const items = computed<ChecklistItem[]>(() => {
-  const allItems = getPhaseById(props.activePhaseId)?.items ?? [];
+// --- Services & Composables ---
+const checklistService = ChecklistService.getInstance();
+const cockpitRef = ref<HTMLElement | null>(null);
+const { isMobile: isMobileRef } = toRefs(props);
+const viewport = useCockpitViewport(cockpitRef, isMobileRef);
+
+// --- State ---
+const imgRef = ref<HTMLImageElement | null>(null);
+const selectedItem = ref<ChecklistItem | null>(null);
+const isMouseInside = ref(false);
+const isFocused = ref(false);
+const devMode = ref(false);
+const devClickedCoord = ref<{ x: number; y: number } | null>(null);
+
+// --- Computed ---
+const items = computed(() => {
+  const allItems = checklistService.getPhaseById(props.activePhaseId)?.items ?? [];
   return allItems.filter((item) => (item.x ?? 0) > 0 && (item.y ?? 0) > 0);
 });
 
-const updateViewportSize = () => {
-  if (!cockpitRef.value) return;
+const ZOOM_STEP = computed(() => (props.isMobile ? 1.5 : 0.5));
+
+const sceneStyle = computed(() => ({
+  width: `${viewport.scaledW.value}px`,
+  height: `${viewport.scaledH.value}px`,
+}));
+
+const imgStyle = computed(() => ({
+  width: `${viewport.scaledW.value}px`,
+  height: `${viewport.scaledH.value}px`,
+  objectPosition: "left top",
+}));
+
+// --- Methods ---
+const updateSize = () => {
+  if (!cockpitRef.value || !imgRef.value) return;
   const rect = cockpitRef.value.getBoundingClientRect();
-  viewportW.value = rect.width;
-  viewportH.value = rect.height;
-};
-
-const onImageLoad = (event: Event) => {
-  const img = event.target as HTMLImageElement;
-  imageNaturalW.value = img.naturalWidth;
-  imageNaturalH.value = img.naturalHeight;
-  updateViewportSize();
-};
-
-let resizeObserver: ResizeObserver | null = null;
-onMounted(() => {
-  updateViewportSize();
-  if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) {
-    imageNaturalW.value = imgRef.value.naturalWidth;
-    imageNaturalH.value = imgRef.value.naturalHeight;
-  }
-
-  if (cockpitRef.value && typeof ResizeObserver !== "undefined") {
-    resizeObserver = new ResizeObserver(() => {
-      updateViewportSize();
-    });
-    resizeObserver.observe(cockpitRef.value);
-  }
-});
-
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  window.removeEventListener("mousemove", onWindowMouseMove);
-  window.removeEventListener("mouseup", onWindowMouseUp);
-});
-
-const baseScale = computed(() => {
-  const iw = imageNaturalW.value;
-  if (iw <= 0) return 1;
-  const vw = viewportW.value > 0 ? viewportW.value : window.innerWidth;
-  // Use fit-to-width as the baseline for consistent initial load and smooth zoom.
-  return vw / iw;
-});
-
-const scaledW = computed(
-  () => imageNaturalW.value * baseScale.value * zoom.value,
-);
-const scaledH = computed(
-  () => imageNaturalH.value * baseScale.value * zoom.value,
-);
-
-const sceneStyle = computed(() => {
-  if (scaledW.value <= 0 || scaledH.value <= 0)
-    return { width: "100%", height: "100%" };
-
-  return {
-    width: `${Math.round(scaledW.value)}px`,
-    height: `${Math.round(scaledH.value)}px`,
-  };
-});
-
-const overlayTransitionClass = computed(() =>
-  isFocused.value ? "is-focused" : "",
-);
-
-const setViewportScroll = (
-  left: number,
-  top: number,
-  behavior: "auto" | "smooth" = "auto",
-) => {
-  if (!cockpitRef.value) return;
-  const maxLeft = Math.max(0, scaledW.value - viewportW.value);
-  const maxTop = Math.max(0, scaledH.value - viewportH.value);
-  const nextLeft = clamp(left, 0, maxLeft);
-  const nextTop = clamp(top, 0, maxTop);
-  if (
-    cockpitRef.value &&
-    "scrollTo" in cockpitRef.value &&
-    typeof cockpitRef.value.scrollTo === "function"
-  ) {
-    try {
-      cockpitRef.value.scrollTo({
-        left: nextLeft,
-        top: nextTop,
-        behavior,
-      });
-    } catch {
-      // ignore
-      cockpitRef.value.scrollLeft = nextLeft;
-      cockpitRef.value.scrollTop = nextTop;
-    }
-  } else if (cockpitRef.value) {
-    cockpitRef.value.scrollLeft = nextLeft;
-    cockpitRef.value.scrollTop = nextTop;
-  }
-};
-
-const setZoom = async (
-  nextZoom: number,
-  focal?: { clientX: number; clientY: number },
-) => {
-  // If we don't have a measured scene, just update zoom level clamped.
-  if (!cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0) {
-    zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
-    return;
-  }
-
-  // Determine the focal ratios inside the scene so the focal point remains
-  // stationary while zooming. If no focal point provided, fall back to the
-  // current viewport centre behaviour.
-  let widthRatio: number;
-  let heightRatio: number;
-  try {
-    const rect = cockpitRef.value.getBoundingClientRect();
-    if (focal) {
-      const fx = focal.clientX - rect.left;
-      const fy = focal.clientY - rect.top;
-      widthRatio = clamp(fx / Math.max(1, rect.width), 0, 1);
-      heightRatio = clamp(fy / Math.max(1, rect.height), 0, 1);
-    } else {
-      const currentCenterX = cockpitRef.value.scrollLeft + viewportW.value / 2;
-      const currentCenterY = cockpitRef.value.scrollTop + viewportH.value / 2;
-      widthRatio = currentCenterX / scaledW.value;
-      heightRatio = currentCenterY / scaledH.value;
-    }
-  } catch {
-    widthRatio = 0.5;
-    heightRatio = 0.5;
-  }
-
-  zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
-  await nextTick();
-
-  const nextCenterX = widthRatio * scaledW.value;
-  const nextCenterY = heightRatio * scaledH.value;
-  setViewportScroll(
-    nextCenterX - viewportW.value / 2,
-    nextCenterY - viewportH.value / 2,
+  viewport.updateDimensions(
+    rect.width,
+    rect.height,
+    imgRef.value.naturalWidth,
+    imgRef.value.naturalHeight
   );
 };
 
-const zoomIn = async (event?: Event) => {
+const onImageLoad = () => updateSize();
+
+const zoomIn = () => {
   isFocused.value = false;
-  await setZoom(zoom.value + ZOOM_STEP.value);
-  try {
-    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {
-    // ignore
-  }
+  viewport.setZoom(viewport.zoom.value + ZOOM_STEP.value);
 };
 
-const zoomOut = async (event?: Event) => {
+const zoomOut = () => {
   isFocused.value = false;
-  await setZoom(zoom.value - ZOOM_STEP.value);
-  try {
-    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {
-    // ignore
-  }
+  viewport.setZoom(viewport.zoom.value - ZOOM_STEP.value);
 };
 
-const resetZoom = async (event?: Event) => {
+const resetZoom = () => {
   isFocused.value = false;
-  await setZoom(1);
-  try {
-    (event?.currentTarget as HTMLElement | undefined)?.blur?.();
-  } catch {
-    // ignore
-  }
-};
-
-let dragStartX = 0;
-let dragStartY = 0;
-let dragStartLeft = 0;
-let dragStartTop = 0;
-let didDrag = false;
-const DRAG_THRESHOLD_PX = 3;
-
-const onWindowMouseMove = (event: MouseEvent) => {
-  if (!isDragging.value || !cockpitRef.value) return;
-  const dx = event.clientX - dragStartX;
-  const dy = event.clientY - dragStartY;
-  if (
-    !didDrag &&
-    (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX)
-  ) {
-    didDrag = true;
-  }
-  setViewportScroll(dragStartLeft - dx, dragStartTop - dy);
-};
-
-const onWindowMouseUp = () => {
-  if (!isDragging.value) return;
-  isDragging.value = false;
-  window.removeEventListener("mousemove", onWindowMouseMove);
-  window.removeEventListener("mouseup", onWindowMouseUp);
-};
-
-const onMouseDown = (event: MouseEvent) => {
-  if (event.button !== 0 || !cockpitRef.value) return;
-  const target = event.target as HTMLElement | null;
-  if (
-    target?.closest(
-      ".hotspot, .modal-overlay, .dev-toggle, .dev-panel, .zoom-controls",
-    )
-  )
-    return;
-
-  isDragging.value = true;
-  isFocused.value = false;
-  didDrag = false;
-  dragStartX = event.clientX;
-  dragStartY = event.clientY;
-  dragStartLeft = cockpitRef.value.scrollLeft;
-  dragStartTop = cockpitRef.value.scrollTop;
-  window.addEventListener("mousemove", onWindowMouseMove);
-  window.addEventListener("mouseup", onWindowMouseUp);
-  event.preventDefault();
-};
-
-let initialPinchDistance = 0;
-let initialZoom = 1;
-
-const getPinchDistance = (event: TouchEvent) => {
-  const t1 = event.touches[0];
-  const t2 = event.touches[1];
-  return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-};
-
-let pinchCenter: { clientX: number; clientY: number } | null = null;
-
-const onTouchStart = (event: TouchEvent) => {
-  if (event.touches.length === 2) {
-    initialPinchDistance = getPinchDistance(event);
-    initialZoom = zoom.value;
-    // Compute the midpoint of the two touches to use as the focal point so the
-    // scene zooms toward the user's fingers instead of recentering elsewhere.
-    const t1 = event.touches[0];
-    const t2 = event.touches[1];
-    pinchCenter = { clientX: (t1.clientX + t2.clientX) / 2, clientY: (t1.clientY + t2.clientY) / 2 };
-  } else {
-    pinchCenter = null;
-  }
-};
-
-const onTouchMove = async (event: TouchEvent) => {
-  if (event.touches.length === 2) {
-    // Prevent default browser zoom/scroll while pinching
-    if (event.cancelable) event.preventDefault();
-
-    const currentDistance = getPinchDistance(event);
-    if (initialPinchDistance > 0) {
-      const scale = currentDistance / initialPinchDistance;
-      const nextZoom = initialZoom * scale;
-      // Use the stored pinch center so the zoom anchors to the fingers.
-      await setZoom(nextZoom, pinchCenter ?? undefined);
-    }
-  }
-};
-
-const handleMouseEnter = () => {
-  isMouseInside.value = true;
-};
-const handleMouseLeave = () => {
-  isMouseInside.value = false;
+  viewport.setZoom(1);
 };
 
 const onHotspotClick = (item: ChecklistItem) => {
@@ -318,57 +91,35 @@ const onHotspotClick = (item: ChecklistItem) => {
   emit("hotspot-click", item.id);
 };
 
-watch(
-  () => props.focusedItemId,
-  async (id) => {
-    if (!id || !cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0)
-      return;
-    const item = items.value.find((candidate) => candidate.id === id);
-    if (!item || item.x === undefined || item.y === undefined) return;
-
-    selectedItem.value = item;
-    isFocused.value = true;
-
-    const targetLeft = (item.x / 100) * scaledW.value - viewportW.value / 2;
-    const targetTop = (item.y / 100) * scaledH.value - viewportH.value / 2;
-    await nextTick();
-    setViewportScroll(targetLeft, targetTop, "smooth");
-  },
-);
-
-const logPosition = (event: MouseEvent) => {
-  if (didDrag || !cockpitRef.value) return;
-  const rect = cockpitRef.value
-    .querySelector(".image-wrapper")
-    ?.getBoundingClientRect();
-  if (!rect) return;
+const handleImageClick = (event: MouseEvent) => {
+  if (viewport.didDrag.value) return;
+  
+  // Use currentTarget if available (for tests), fallback to imgRef
+  const target = (event.currentTarget as HTMLElement) || imgRef.value;
+  if (!target) return;
+  
+  const rect = target.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
 
   const x = ((event.clientX - rect.left) / rect.width) * 100;
   const y = ((event.clientY - rect.top) / rect.height) * 100;
 
   if (devMode.value) {
     devClickedCoord.value = { x: +x.toFixed(2), y: +y.toFixed(2) };
-    return;
+  } else {
+    console.log(`Clicked at x: ${x.toFixed(2)}, y: ${y.toFixed(2)}`);
   }
-
-  console.log(`Clicked at x: ${x.toFixed(2)}, y: ${y.toFixed(2)}`);
 };
-
-const devMode = ref(false);
-const devClickedCoord = ref<{ x: number; y: number } | null>(null);
 
 const devClosestItem = computed(() => {
   if (!devClickedCoord.value) return null;
   const { x, y } = devClickedCoord.value;
-
   let closest = null;
-  let minDistance = 1.0; // Ignore anything further than 1%
+  let minDistance = 1.0;
 
   for (const item of items.value) {
     if (item.x === undefined || item.y === undefined) continue;
-    const dx = x - item.x;
-    const dy = y - item.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const distance = Math.sqrt(Math.pow(x - item.x, 2) + Math.pow(y - item.y, 2));
     if (distance < minDistance) {
       minDistance = distance;
       closest = item;
@@ -377,41 +128,105 @@ const devClosestItem = computed(() => {
   return closest;
 });
 
-const toggleDevMode = () => {
-  devMode.value = !devMode.value;
-  devClickedCoord.value = null;
+// --- Touch handling (Pinch-to-zoom) ---
+let initialPinchDistance = 0;
+let initialZoom = 1;
+let pinchCenter: { clientX: number; clientY: number } | null = null;
+
+const getPinchDistance = (event: TouchEvent) => {
+  const t1 = event.touches[0];
+  const t2 = event.touches[1];
+  return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
 };
 
-const onWheel = async (event: WheelEvent) => {
+const onTouchStart = (event: TouchEvent) => {
+  if (event.touches.length === 2) {
+    initialPinchDistance = getPinchDistance(event);
+    initialZoom = viewport.zoom.value;
+    const t1 = event.touches[0];
+    const t2 = event.touches[1];
+    pinchCenter = { clientX: (t1.clientX + t2.clientX) / 2, clientY: (t1.clientY + t2.clientY) / 2 };
+  }
+};
+
+const onTouchMove = (event: TouchEvent) => {
+  if (event.touches.length === 2 && initialPinchDistance > 0) {
+    if (event.cancelable) event.preventDefault();
+    const scale = getPinchDistance(event) / initialPinchDistance;
+    viewport.setZoom(initialZoom * scale, pinchCenter ?? undefined);
+  }
+};
+
+const onWheel = (event: WheelEvent) => {
   if (!(event.ctrlKey || event.metaKey)) return;
   event.preventDefault();
   isFocused.value = false;
-  if (event.deltaY < 0) await setZoom(zoom.value + ZOOM_STEP.value);
-  if (event.deltaY > 0) await setZoom(zoom.value - ZOOM_STEP.value);
+  const delta = event.deltaY < 0 ? ZOOM_STEP.value : -ZOOM_STEP.value;
+  viewport.setZoom(viewport.zoom.value + delta, { clientX: event.clientX, clientY: event.clientY });
 };
 
-const hotspotStyle = (item: ChecklistItem) => {
-  const xPct = (item.x ?? 0) / 100;
-  const yPct = (item.y ?? 0) / 100;
+// --- Lifecycle ---
+let resizeObserver: ResizeObserver | null = null;
+onMounted(() => {
+  updateSize();
+  if (typeof ResizeObserver !== "undefined") {
+    resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(cockpitRef.value!);
+  }
+});
 
-  // Since the image always fills the scene width, we can use scaled dimensions directly.
-  const dispW = scaledW.value;
-  const dispH = scaledH.value;
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  viewport.onWindowMouseUp(); // Cleanup window listeners
+});
 
-  const leftPx = Math.round(xPct * dispW);
-  const topPx = Math.round(yPct * dispH);
-  return { left: `${leftPx}px`, top: `${topPx}px` };
-};
+// --- Watchers ---
+watch(() => props.focusedItemId, (id) => {
+  if (!id) return;
+  const item = items.value.find(i => i.id === id);
+  if (item && item.x !== undefined && item.y !== undefined) {
+    selectedItem.value = item;
+    isFocused.value = true;
+    viewport.scrollToCoord(item.x, item.y, 'smooth');
+  }
+});
 
-const imgStyle = computed(() => {
-  if (scaledW.value <= 0 || scaledH.value <= 0)
-    return { width: "100%", height: "100%", objectPosition: "left top" };
+defineExpose({
+  // State
+  zoom: viewport.zoom,
+  isDragging: viewport.isDragging,
+  didDrag: viewport.didDrag,
+  selectedItem,
+  devMode,
+  items,
+  devClickedCoord,
+  
+  // Methods
+  onMouseDown: viewport.onMouseDown,
+  onWindowMouseMove: viewport.onWindowMouseMove,
+  onWindowMouseUp: viewport.onWindowMouseUp,
+  setViewportScroll: viewport.setViewportScroll,
+  setZoom: viewport.setZoom,
+  zoomIn,
+  updateViewportSize: updateSize,
+  logPosition: handleImageClick,
+  toggleDevMode: () => { devMode.value = !devMode.value; },
+  onImageLoad,
+  onTouchStart,
+  onTouchMove,
+  onWheel,
 
-  return {
-    width: `${Math.round(scaledW.value)}px`,
-    height: `${Math.round(scaledH.value)}px`,
-    objectPosition: "left top",
-  };
+  // Refs (for direct manipulation in tests)
+  viewportW: viewport.viewportW,
+  viewportH: viewport.viewportH,
+  imageNaturalW: viewport.imageNaturalW,
+  imageNaturalH: viewport.imageNaturalH,
+  cockpitRef,
+});
+
+const hotspotStyle = (item: ChecklistItem) => ({
+  left: `${Math.round(((item.x ?? 0) / 100) * viewport.scaledW.value)}px`,
+  top: `${Math.round(((item.y ?? 0) / 100) * viewport.scaledH.value)}px`,
 });
 </script>
 
@@ -420,58 +235,51 @@ const imgStyle = computed(() => {
     <div
       ref="cockpitRef"
       class="cockpit-viewport"
-      :class="{ 'is-dragging': isDragging }"
-      @mousedown="onMouseDown"
+      :class="{ 'is-dragging': viewport.isDragging.value }"
+      @mousedown="viewport.onMouseDown"
       @wheel="onWheel"
       @touchstart="onTouchStart"
       @touchmove="onTouchMove"
-      @mouseenter="handleMouseEnter"
-      @mouseleave="handleMouseLeave"
+      @mouseenter="isMouseInside = true"
+      @mouseleave="isMouseInside = false"
     >
       <div
         class="cockpit-scene"
-        :class="overlayTransitionClass"
+        :class="{ 'is-focused': isFocused }"
         :style="sceneStyle"
       >
         <div
-          ref="imageWrapperRef"
           class="image-wrapper"
-          @click="logPosition"
+          @click="handleImageClick"
         >
           <img
             ref="imgRef"
             src="../assets/A320neo-Cockpit.png"
             alt="A320neo Cockpit"
             class="cockpit-img"
-            :class="{ 'is-zoomed': zoom > 1 }"
+            :class="{ 'is-zoomed': viewport.zoom.value > 1 }"
             :style="imgStyle"
             @load="onImageLoad"
           >
 
-          <div
-            class="hotspot-overlay"
-            :aria-label="devMode ? 'Dev Mode markers' : 'Checklist hotspots'"
-          >
+          <div class="hotspot-overlay">
             <template v-if="!devMode">
-              <div
+              <HotspotMarker
                 v-for="item in items"
                 :key="item.id"
-                class="hotspot"
-                :class="{ active: focusedItemId === item.id }"
-                :style="hotspotStyle(item)"
-                @click.stop="onHotspotClick(item)"
-              >
-                <div class="hotspot-ring" />
-                <div class="hotspot-dot" />
-                <span class="hotspot-label">{{ item.item }}</span>
-              </div>
+                :item="item"
+                :is-active="focusedItemId === item.id"
+                :left="hotspotStyle(item).left"
+                :top="hotspotStyle(item).top"
+                @click="onHotspotClick(item)"
+              />
             </template>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- UI Overlays (Fixed relative to the container) -->
+    <!-- UI Overlays -->
     <div
       v-if="!isMobile"
       class="zoom-controls"
@@ -482,9 +290,8 @@ const imgStyle = computed(() => {
         type="button"
         class="zoom-button"
         aria-label="Zoom out"
-        :disabled="zoom <= MIN_ZOOM"
-        @mousedown.prevent
-        @click="zoomOut($event)"
+        :disabled="viewport.zoom.value <= viewport.MIN_ZOOM"
+        @click="zoomOut"
       >
         -
       </button>
@@ -492,94 +299,38 @@ const imgStyle = computed(() => {
         type="button"
         class="zoom-button zoom-status"
         aria-label="Reset zoom"
-        @mousedown.prevent
-        @click="resetZoom($event)"
+        @click="resetZoom"
       >
-        {{ Math.round(zoom * 100) }}%
+        {{ Math.round(viewport.zoom.value * 100) }}%
       </button>
       <button
         type="button"
         class="zoom-button"
         aria-label="Zoom in"
-        :disabled="zoom >= MAX_ZOOM"
-        @mousedown.prevent
-        @click="zoomIn($event)"
+        :disabled="viewport.zoom.value >= viewport.MAX_ZOOM.value"
+        @click="zoomIn"
       >
         +
       </button>
     </div>
 
-    <button
+    <CockpitDevTools
       v-if="!isMobile"
-      class="dev-toggle"
-      :class="{ active: devMode }"
-      @click="toggleDevMode"
-    >
-      {{ devMode ? "Exit Dev" : "Dev Mode" }}
-    </button>
-
-    <div
-      v-if="devMode && devClickedCoord"
-      class="dev-panel"
-      @mousedown.stop
-    >
-      <div class="dev-item">
-        Clicked: x: {{ devClickedCoord.x }}, y: {{ devClickedCoord.y }}
-      </div>
-      <div
-        v-if="devClosestItem"
-        class="dev-action"
-      >
-        Closest: {{ devClosestItem.item }} ({{ devClosestItem.id }})
-      </div>
-      <div
-        v-else
-        class="dev-progress"
-      >
-        No item within 1% range
-      </div>
-    </div>
+      :dev-mode="devMode"
+      :clicked-coord="devClickedCoord"
+      :closest-item="devClosestItem"
+      @toggle="devMode = !devMode"
+    />
 
     <div
       v-if="isMouseInside && !devMode"
       class="crosshair"
     />
 
-    <Transition name="fade">
-      <div
-        v-if="selectedItem"
-        class="modal-overlay"
-        @click="selectedItem = null"
-      >
-        <div
-          class="modal-card"
-          @click.stop
-        >
-          <button
-            class="close-btn"
-            @click="selectedItem = null"
-          >
-            ×
-          </button>
-          <div class="panel-tag">
-            {{ selectedItem.panel.toUpperCase() }}
-          </div>
-          <h2>{{ selectedItem.item }}</h2>
-          <div class="action-required">
-            Action: <span>{{ selectedItem.action }}</span>
-          </div>
-          <p>{{ selectedItem.description }}</p>
-          <div class="modal-footer">
-            <button
-              class="btn-primary"
-              @click="selectedItem = null"
-            >
-              GOT IT
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <ItemDetailModal
+      :item="selectedItem"
+      @close="selectedItem = null"
+    />
   </div>
 </template>
 
@@ -604,18 +355,6 @@ const imgStyle = computed(() => {
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   touch-action: pan-x pan-y;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
-
-.cockpit-viewport::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.cockpit-viewport::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
-  border-radius: 999px;
 }
 
 .cockpit-viewport.is-dragging {
@@ -624,8 +363,6 @@ const imgStyle = computed(() => {
 
 .cockpit-scene {
   position: relative;
-  min-width: 0;
-  min-height: 0;
   flex: 0 0 auto;
 }
 
@@ -633,25 +370,12 @@ const imgStyle = computed(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  overflow: visible;
 }
 
 .cockpit-img {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-position: left top;
   user-select: none;
-  pointer-events: auto;
   box-shadow: 0 0 100px rgba(0, 0, 0, 0.8);
-}
-
-.cockpit-img.is-zoomed {
-  max-width: none;
-  max-height: none;
-  position: absolute;
-  top: 0;
-  left: 0;
 }
 
 .hotspot-overlay {
@@ -659,80 +383,6 @@ const imgStyle = computed(() => {
   inset: 0;
   pointer-events: none;
   z-index: 10;
-}
-
-.hotspot {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  transform: translate(-50%, -50%);
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.hotspot-ring {
-  position: absolute;
-  inset: -6px;
-  border: 1.5px solid rgba(255, 152, 0, 0.85);
-  background: rgba(255, 152, 0, 0.1);
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-.hotspot-dot {
-  position: absolute;
-  inset: 2px;
-  background: #ff9800;
-  border-radius: 50%;
-  box-shadow: 0 0 8px rgba(255, 152, 0, 0.85);
-}
-
-.hotspot.active .hotspot-ring {
-  border-color: #4caf50;
-  background: rgba(76, 175, 80, 0.15);
-  border-width: 2px;
-}
-
-.hotspot.active .hotspot-dot {
-  background: #4caf50;
-  box-shadow: 0 0 8px rgba(76, 175, 80, 0.85);
-}
-
-.hotspot-label {
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 8px;
-  white-space: nowrap;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  text-align: center;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  pointer-events: none;
-  text-shadow:
-    -1px -1px 0 rgba(0, 0, 0, 0.85),
-    1px -1px 0 rgba(0, 0, 0, 0.85),
-    -1px 1px 0 rgba(0, 0, 0, 0.85),
-    1px 1px 0 rgba(0, 0, 0, 0.85);
-}
-
-.hotspot:hover .hotspot-label,
-.hotspot.active .hotspot-label {
-  opacity: 1;
-}
-
-@keyframes pulse {
-  0% {
-    opacity: 1;
-    transform: scale(0.8);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(1.8);
-  }
 }
 
 .zoom-controls {
@@ -759,114 +409,11 @@ const imgStyle = computed(() => {
 
 .zoom-button:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
 }
 
 .zoom-status {
   min-width: 76px;
   font-size: 13px;
-}
-
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 200;
-  backdrop-filter: blur(4px);
-}
-
-.modal-card {
-  background: #1a1e23;
-  width: min(400px, calc(100vw - 32px));
-  padding: 30px;
-  border-radius: 12px;
-  position: relative;
-  border: 1px solid #444;
-  color: #ddd;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-}
-
-.close-btn {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: none;
-  border: none;
-  color: #888;
-  font-size: 24px;
-  cursor: pointer;
-}
-
-.panel-tag {
-  background: #333;
-  color: #aaa;
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 10px;
-  border-radius: 4px;
-  margin-bottom: 10px;
-  letter-spacing: 1px;
-}
-
-h2 {
-  margin: 0 0 10px 0;
-  color: #fff;
-  font-size: 22px;
-}
-
-.action-required {
-  color: #ff9800;
-  font-weight: bold;
-  margin-bottom: 20px;
-  font-size: 16px;
-}
-
-.action-required span {
-  color: #fff;
-  background: rgba(255, 152, 0, 0.1);
-  border: 1px solid #ff9800;
-  padding: 4px 12px;
-  border-radius: 4px;
-  margin-left: 8px;
-}
-
-p {
-  line-height: 1.6;
-  font-size: 15px;
-  color: #bbb;
-}
-
-.modal-footer {
-  margin-top: 25px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.btn-primary {
-  background: #ff9800;
-  color: #000;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.btn-primary:hover {
-  background: #f57c00;
-}
-
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
 }
 
 .crosshair {
@@ -882,143 +429,12 @@ p {
   z-index: 120;
 }
 
-.dev-toggle {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  z-index: 150;
-  background: rgba(20, 24, 28, 0.9);
-  color: #ff9800;
-  border: 1px solid #ff9800;
-  padding: 4px 8px;
-  font-size: 10px;
-  font-weight: bold;
-  letter-spacing: 1px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-  backdrop-filter: blur(10px);
-}
-
-.dev-toggle.active {
-  background: #ff9800;
-  color: #000;
-}
-
-.dev-panel {
-  position: absolute;
-  bottom: 48px;
-  left: 12px;
-  z-index: 150;
-  width: 260px;
-  background: rgba(20, 24, 28, 0.95);
-  border: 1px solid #333;
-  border-radius: 6px;
-  padding: 12px;
-  color: #ddd;
-  font-size: 13px;
-  backdrop-filter: blur(10px);
-}
-
-.dev-progress {
-  color: #888;
-  font-size: 11px;
-  letter-spacing: 1px;
-  margin-bottom: 6px;
-}
-
-.dev-phase {
-  color: #4caf50;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 4px;
-}
-
-.dev-item {
-  color: #fff;
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-
-.dev-action {
-  color: #ff9800;
-  font-size: 12px;
-  margin-bottom: 10px;
-}
-
-.dev-buttons {
-  display: flex;
-  gap: 6px;
-}
-
-.dev-buttons button {
-  flex: 1;
-  background: #2a2e33;
-  color: #ddd;
-  border: 1px solid #444;
-  padding: 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.dev-buttons button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.dev-buttons button.primary {
-  background: #ff9800;
-  color: #000;
-  border-color: #ff9800;
-}
-
-.dev-marker-html {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  background: #4caf50;
-  border: 1px solid #fff;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.dev-marker-html.current {
-  background: #ff9800;
-  width: 6px;
-  height: 6px;
-  z-index: 2;
-}
-
 .cockpit-container::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(
-    circle,
-    transparent 42%,
-    rgba(0, 0, 0, 0.38) 100%
-  );
+  background: radial-gradient(circle, transparent 42%, rgba(0, 0, 0, 0.38) 100%);
   pointer-events: none;
   z-index: 100;
-}
-
-@media (max-width: 900px) {
-  .zoom-controls {
-    top: 10px;
-    right: 10px;
-    gap: 6px;
-  }
-
-  .zoom-button {
-    min-width: 40px;
-    height: 40px;
-  }
-
-  .dev-panel {
-    width: min(260px, calc(100vw - 24px));
-  }
 }
 </style>

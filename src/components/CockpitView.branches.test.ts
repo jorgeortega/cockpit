@@ -5,11 +5,16 @@ import { DEFAULT_PHASE_ID } from '../data/checklist';
 
 describe('CockpitView branch coverage helpers', () => {
   it('exercise drag, dev toggle, and dev mode logic', async () => {
-    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null }, attachTo: document.body });
+    const wrapper = mount(CockpitView, { props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false }, attachTo: document.body });
 
     // Stub bounding rect for viewport sizing
     const el = wrapper.find('.cockpit-viewport').element as HTMLElement;
-    el.getBoundingClientRect = () => ({ width: 800, height: 600, left: 0, top: 0, right: 800, bottom: 600, x: 0, y: 0, toJSON() { return null; } });
+    const rect = { width: 1000, height: 800, left: 0, top: 0, right: 1000, bottom: 800, x: 0, y: 0, toJSON() { return null; } };
+    el.getBoundingClientRect = () => rect as DOMRect;
+    
+    // Also stub the image rect for logPosition
+    const img = wrapper.find('.cockpit-img').element as HTMLElement;
+    img.getBoundingClientRect = () => rect as DOMRect;
 
     // Stub image wrapper rect
     const wrapperEl = wrapper.find('.image-wrapper').element as HTMLElement;
@@ -51,7 +56,7 @@ describe('CockpitView branch coverage helpers', () => {
     vi.stubGlobal('ResizeObserver', mockObserver);
 
     const wrapper = mount(CockpitView, { 
-      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null },
+      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false },
       attachTo: document.body 
     });
     
@@ -127,7 +132,7 @@ describe('CockpitView branch coverage helpers', () => {
     Object.defineProperty(prototype, 'naturalHeight', { value: 800, configurable: true });
 
     const wrapper = mount(CockpitView, { 
-      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null },
+      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false },
       attachTo: document.body 
     });
 

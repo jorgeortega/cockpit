@@ -1,6 +1,16 @@
 // ---------------------------------------------------------------------------
 // localStorage persistence for the cockpit simulator.
 //
+// CS Note: Serialization & Data Integrity
+// 
+// When saving data to "Disk" (LocalStorage), we must convert our complex 
+// memory structures (like Map and Set) into Strings (JSON). This process 
+// is called "Serialization". 
+// 
+// We use a versioning system (version: 2) so that if we change the data 
+// format in the future, we can migrate the old data safely without 
+// crashing the user's browser.
+//
 // Responsibilities:
 //   - Define the on-disk schema (PersistedState) and its version.
 //   - Serialise/deserialise between the Map<string, Set<string>> used at

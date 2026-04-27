@@ -6,7 +6,7 @@ import { DEFAULT_PHASE_ID } from '../data/checklist';
 describe('CockpitView touch and wheel interactions', () => {
   it('handles pinch-to-zoom and wheel zoom without throwing', async () => {
     const wrapper = mount(CockpitView, {
-      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null },
+      props: { activePhaseId: DEFAULT_PHASE_ID, focusedItemId: null, isMobile: false },
       attachTo: document.body,
     });
 
