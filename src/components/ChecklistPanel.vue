@@ -177,4 +177,12 @@ h3 {
   background: #4CAF50;
   transition: width 0.25s ease-out;
 }
+
+@media (max-width: 900px) {
+  /* Give extra top padding on mobile so the drawer handle doesn't overlap
+     the phase tabs immediately below it. */
+  .checklist-overlay {
+    padding-top: 56px;
+  }
+}
 </style>
