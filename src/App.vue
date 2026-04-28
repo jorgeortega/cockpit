@@ -220,7 +220,7 @@ onBeforeUnmount(() => {
       ref="checklistSectionRef"
       class="checklist-section"
       :class="{ mobile: isMobile, open: isChecklistOpen }"
-      :style="isMobile && isChecklistOpen && dynamicOpenHeight ? { height: dynamicOpenHeight + 'px' } : null"
+      :style="isMobile ? { height: isChecklistOpen ? (dynamicOpenHeight ? dynamicOpenHeight + 'px' : '72px') : '72px' } : null"
       @touchstart="onChecklistTouchStart"
       @touchmove="onChecklistTouchMove"
       @touchend="onChecklistTouchEnd"
@@ -317,15 +317,18 @@ onBeforeUnmount(() => {
     left: 0;
     right: 0;
     bottom: 0;
-    height: min(72vh, 560px);
+    /* height will be managed inline to allow smooth transitions between
+       the peek height and expanded content height */
+    height: 72px;
     border-radius: 20px 20px 0 0;
     box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
-    transform: translateY(calc(100% - 72px));
-    transition: transform 0.25s ease;
+    overflow: hidden;
+    transition: height 320ms cubic-bezier(0.2, 0.9, 0.2, 1), box-shadow 200ms ease;
   }
 
+  /* Slight visual change when open */
   .checklist-section.open {
-    transform: translateY(0);
+    box-shadow: 0 -22px 64px rgba(0, 0, 0, 0.5);
   }
 
   .drawer-handle {
@@ -353,11 +356,13 @@ onBeforeUnmount(() => {
     background: rgba(255, 255, 255, 0.12);
     box-shadow: 0 2px 8px rgba(0,0,0,0.4) inset;
     display: block;
+    transition: background 200ms ease, transform 240ms cubic-bezier(0.2,0.9,0.2,1);
   }
 
   /* When the drawer is open, elevate the handle visually */
   .checklist-section.open .drawer-handle::before {
     background: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
   }
 }
 </style>
