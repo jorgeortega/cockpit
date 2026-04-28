@@ -49,6 +49,22 @@ const focusedItemId = ref<string | null>(null);
 const scrollToId = ref<string | null>(null);
 const isMobile = ref(false);
 const isChecklistOpen = ref(false);
+const checklistSectionRef = ref<HTMLElement | null>(null);
+const dynamicOpenHeight = ref<number | null>(null);
+
+const MAX_OPEN_HEIGHT_PX = Math.min(window.innerHeight * 0.72, 560); // previous cap
+
+const measureChecklistHeight = () => {
+  const section = checklistSectionRef.value;
+  if (!section) return;
+  // Find the inner card which contains the content we care about.
+  const card = section.querySelector('.checklist-card') as HTMLElement | null;
+  const overlay = section.querySelector('.checklist-overlay') as HTMLElement | null;
+  const measured = (card?.offsetHeight ?? section.scrollHeight ?? 0) + (overlay ? parseInt(getComputedStyle(overlay).paddingTop || '0', 10) : 0);
+  // Add a small extra gap for breathing room
+  const desired = Math.min(Math.round(measured + 24), MAX_OPEN_HEIGHT_PX);
+  dynamicOpenHeight.value = desired;
+};
 
 // Completion state keyed by phase id.
 const completedByPhase = ref<Map<string, Set<string>>>(
@@ -172,10 +188,14 @@ const onChecklistTouchEnd = () => {
 onMounted(() => {
   syncViewportMode();
   window.addEventListener("resize", syncViewportMode);
+  // measure checklist height when mounted and on resize
+  measureChecklistHeight();
+  window.addEventListener('resize', measureChecklistHeight);
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("resize", syncViewportMode);
+  window.removeEventListener('resize', measureChecklistHeight);
 });
 </script>
 
@@ -197,8 +217,10 @@ onBeforeUnmount(() => {
 
     <aside
       id="checklist-drawer"
+      ref="checklistSectionRef"
       class="checklist-section"
       :class="{ mobile: isMobile, open: isChecklistOpen }"
+      :style="isMobile && isChecklistOpen && dynamicOpenHeight ? { height: dynamicOpenHeight + 'px' } : null"
       @touchstart="onChecklistTouchStart"
       @touchmove="onChecklistTouchMove"
       @touchend="onChecklistTouchEnd"
@@ -207,7 +229,7 @@ onBeforeUnmount(() => {
         type="button"
         class="drawer-handle"
         aria-label="Toggle checklist"
-        @click="isChecklistOpen = !isChecklistOpen"
+        @click="(isChecklistOpen = !isChecklistOpen) && measureChecklistHeight()"
       ></button>
       <ChecklistPanel
         :active-phase-id="activePhaseId"
