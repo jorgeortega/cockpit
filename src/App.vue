@@ -124,6 +124,13 @@ const onCockpitTouchStart = (e: TouchEvent) => {
   if (!isMobile.value) return;
   if (e.touches.length !== 1) return;
   touchStartY = e.touches[0].clientY;
+  // Only initiate the open-swipe if the touch started within the bottom 10%
+  // of the viewport. This reduces accidental opens from general touches.
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  if (touchStartY < vh * 0.9) {
+    touchActive = false;
+    return;
+  }
   touchActive = true;
 };
 
@@ -277,7 +284,7 @@ onBeforeUnmount(() => {
     max-width: none;
   }
 
-  .checklist-section.mobile {
+  .checklist-section {
     position: fixed;
     left: 0;
     right: 0;
@@ -289,7 +296,7 @@ onBeforeUnmount(() => {
     transition: transform 0.25s ease;
   }
 
-  .checklist-section.mobile.open {
+  .checklist-section.open {
     transform: translateY(0);
   }
 }

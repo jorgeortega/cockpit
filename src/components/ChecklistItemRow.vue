@@ -38,15 +38,12 @@ const emit = defineEmits<{
 const labelSegments = computed(() => expandAcronyms(props.item.item));
 const actionSegments = computed(() => expandAcronyms(props.item.action));
 
-// One click, two intents: mark the item and tell the cockpit to pan. Emitting
-// both events lets the parent route each to its own state.
-const CLICK_FOCUS_DELAY_MS = 200;
+// One click: mark the item only. The parent owns any cockpit focusing when
+// triggered from a hotspot. This avoids showing the detail overlay when the
+// user is merely checking an item.
 const handleClick = (id: string) => {
   // Toggle immediately so completion state updates responsively.
   emit('toggle', id);
-  // Delay focusing (which triggers the cockpit pan + modal) so the UI feels
-  // smoother on both touch and mouse interactions.
-  setTimeout(() => emit('focus', id), CLICK_FOCUS_DELAY_MS);
 };
 </script>
 

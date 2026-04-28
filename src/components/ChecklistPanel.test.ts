@@ -74,18 +74,14 @@ describe('ChecklistPanel', () => {
     expect(events![0]).toEqual([firstItemId])
   })
 
-  it('emits `focus-item` with the item id when a row is clicked (for cockpit pan)', async () => {
-    const firstItemId = getPhaseById(PHASE_ID)!.items[0].id
+  it('does not emit `focus-item` when a row is clicked (checking should not focus the cockpit)', async () => {
     const wrapper = makeWrapper()
 
     await wrapper.findAll('.checklist-item')[0].trigger('click')
 
-    // focus-item is emitted after a UI delay mirroring the cockpit focus timing
-    await new Promise((r) => setTimeout(r, 250))
-
+    // Ensure no focus event is emitted when toggling via the checklist
     const events = wrapper.emitted('focus-item')
-    expect(events).toBeTruthy()
-    expect(events![0]).toEqual([firstItemId])
+    expect(events).toBeFalsy()
   })
 
   it('falls back to a generic heading and empty list when the phase id is unknown', () => {

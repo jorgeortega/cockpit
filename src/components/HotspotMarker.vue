@@ -36,8 +36,8 @@ defineEmits<{
 <style scoped>
 .hotspot {
   position: absolute;
-  width: 8px;
-  height: 8px;
+  width: 12px;
+  height: 12px;
   transform: translate(-50%, -50%);
   cursor: pointer;
   pointer-events: auto;
@@ -45,7 +45,7 @@ defineEmits<{
 
 .hotspot-ring {
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border: 1.5px solid rgba(255, 152, 0, 0.85);
   background: rgba(255, 152, 0, 0.1);
   border-radius: 50%;
@@ -54,7 +54,7 @@ defineEmits<{
 
 .hotspot-dot {
   position: absolute;
-  inset: 2px;
+  inset: 3px;
   background: #ff9800;
   border-radius: 50%;
   box-shadow: 0 0 8px rgba(255, 152, 0, 0.85);

@@ -43,15 +43,14 @@ describe('ChecklistItemRow', () => {
     expect(wrapper.find('.checkbox').text()).not.toContain('✓')
   })
 
-  it('emits toggle and focus with the item id on click', async () => {
+  it('emits only toggle (no focus) with the item id on click', async () => {
     const wrapper = mount(ChecklistItemRow, {
       props: { item: ITEM, completed: false },
     })
     await wrapper.trigger('click')
     expect(wrapper.emitted('toggle')).toEqual([[ITEM.id]])
-    // Focus is emitted after a short UI delay; wait for it in tests.
-    await new Promise((r) => setTimeout(r, 250))
-    expect(wrapper.emitted('focus')).toEqual([[ITEM.id]])
+    // Ensure no focus event is emitted when toggling via the checklist row
+    expect(wrapper.emitted('focus')).toBeFalsy()
   })
 
   it('exposes aria-checked so screen readers can announce the state', () => {
