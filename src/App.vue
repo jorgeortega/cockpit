@@ -203,6 +203,12 @@ onBeforeUnmount(() => {
       @touchmove="onChecklistTouchMove"
       @touchend="onChecklistTouchEnd"
     >
+      <button
+        type="button"
+        class="drawer-handle"
+        aria-label="Toggle checklist"
+        @click="isChecklistOpen = !isChecklistOpen"
+      ></button>
       <ChecklistPanel
         :active-phase-id="activePhaseId"
         :completed-items="activeCompleted"
@@ -298,6 +304,38 @@ onBeforeUnmount(() => {
 
   .checklist-section.open {
     transform: translateY(0);
+  }
+
+  .drawer-handle {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 64px;
+    height: 32px; /* increased touch target */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    padding: 0;
+    z-index: 110;
+    cursor: pointer;
+  }
+
+  .drawer-handle::before {
+    content: '';
+    width: 56px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.4) inset;
+    display: block;
+  }
+
+  /* When the drawer is open, elevate the handle visually */
+  .checklist-section.open .drawer-handle::before {
+    background: rgba(255, 255, 255, 0.18);
   }
 }
 </style>
