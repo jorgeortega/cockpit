@@ -52,7 +52,7 @@ const isChecklistOpen = ref(false);
 const checklistSectionRef = ref<HTMLElement | null>(null);
 const dynamicOpenHeight = ref<number | null>(null);
 
-const MAX_OPEN_HEIGHT_PX = Math.min(window.innerHeight * 0.72, 560); // previous cap
+const computeMaxOpenHeight = () => Math.min(window.innerHeight * 0.72, 560); // previous cap
 
 const measureChecklistHeight = () => {
   const section = checklistSectionRef.value;
@@ -62,7 +62,7 @@ const measureChecklistHeight = () => {
   const overlay = section.querySelector('.checklist-overlay') as HTMLElement | null;
   const measured = (card?.offsetHeight ?? section.scrollHeight ?? 0) + (overlay ? parseInt(getComputedStyle(overlay).paddingTop || '0', 10) : 0);
   // Add a small extra gap for breathing room
-  const desired = Math.min(Math.round(measured + 24), MAX_OPEN_HEIGHT_PX);
+  const desired = Math.min(Math.round(measured + 24), computeMaxOpenHeight());
   dynamicOpenHeight.value = desired;
 };
 
@@ -123,6 +123,24 @@ watch([activePhaseId, completedByPhase], () => {
     completed: serialize(completedByPhase.value),
   });
 });
+
+// When the active phase changes, and the mobile drawer is open, re-measure
+// the checklist height so the drawer can resize to the new content. A short
+// timeout ensures the DOM has finished updating and any CSS transitions have
+// settled in the panel before measuring.
+watch(activePhaseId, async () => {
+  if (!isMobile.value || !isChecklistOpen.value) return;
+  await Promise.resolve(); // next microtask
+  setTimeout(() => {
+    measureChecklistHeight();
+  }, 80);
+});
+
+const onContentHeight = (h: number) => {
+  if (!isMobile.value) return;
+  const desired = Math.min(Math.round(h + 24), computeMaxOpenHeight());
+  dynamicOpenHeight.value = desired;
+};
 
 const syncViewportMode = () => {
   isMobile.value = window.innerWidth <= 900;
@@ -239,7 +257,7 @@ onBeforeUnmount(() => {
         class="drawer-handle"
         aria-label="Toggle checklist"
         @click="(isChecklistOpen = !isChecklistOpen) && (isChecklistOpen ? measureChecklistHeight() : null)"
-      ></button>
+      />
       <ChecklistPanel
         :active-phase-id="activePhaseId"
         :completed-items="activeCompleted"
@@ -248,6 +266,7 @@ onBeforeUnmount(() => {
         @focus-item="handleFocusItem"
         @phase-change="handlePhaseChange"
         @toggle-item="handleToggleItem"
+        @content-height="onContentHeight"
       />
     </aside>
   </div>

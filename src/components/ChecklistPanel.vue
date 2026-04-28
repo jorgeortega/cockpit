@@ -42,12 +42,14 @@ const emit = defineEmits<{
   (e: 'toggle-item', id: string): void;
   (e: 'focus-item', id: string): void;
   (e: 'phase-change', id: string): void;
+  (e: 'content-height', height: number): void;
 }>();
 
 // --- Dynamic padding to avoid overlapping the drawer handle --------------
 // Refs for measuring header/tab height and applying top padding.
 const overlayRef = ref<HTMLElement | null>(null);
 const headerRef = ref<HTMLElement | null>(null);
+const cardRef = ref<HTMLElement | null>(null);
 const paddingTop = ref<number>(20);
 
 const measureHeader = () => {
@@ -55,6 +57,12 @@ const measureHeader = () => {
   if (!el) return;
   const h = el.getBoundingClientRect().height || el.offsetHeight || 0;
   paddingTop.value = Math.max(12, Math.round(h + 12));
+  // Also emit the overall content height so the parent can size the drawer
+  // (card height + paddingTop). This keeps sizing logic in the App but lets
+  // the panel tell the parent how tall its content is.
+  const card = cardRef.value;
+  const cardH = card ? (card.getBoundingClientRect().height || card.offsetHeight) : 0;
+  emit('content-height', Math.round(cardH + paddingTop.value));
 };
 
 onMounted(() => {
@@ -122,7 +130,11 @@ watch(() => props.scrollToId, async (id) => {
 </script>
 
 <template>
-  <div ref="overlayRef" class="checklist-overlay" :style="{ paddingTop: paddingTop + 'px' }">
+  <div
+    ref="overlayRef"
+    class="checklist-overlay"
+    :style="{ paddingTop: paddingTop + 'px' }"
+  >
     <div ref="headerRef">
       <PhaseSelector
         :phases="flightChecklists"
@@ -130,7 +142,10 @@ watch(() => props.scrollToId, async (id) => {
         @phase-change="(id) => emit('phase-change', id)"
       />
     </div>
-    <div class="checklist-card">
+    <div
+      ref="cardRef"
+      class="checklist-card"
+    >
       <h3>{{ heading }}</h3>
       <div
         class="progress-bar"
