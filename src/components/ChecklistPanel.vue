@@ -31,6 +31,7 @@ const props = defineProps<{
   activePhaseId: string;
   completedItems: Set<string>;
   scrollToId?: string | null;
+  isMobile?: boolean;
 }>();
 
 // --- Events -----------------------------------------------------------------
@@ -57,6 +58,8 @@ const measureHeader = () => {
 };
 
 onMounted(() => {
+  // Only measure on mobile to avoid unnecessary layout work on desktop
+  if (!props.isMobile) return;
   // initial measure after DOM paint
   nextTick(measureHeader);
   if (typeof ResizeObserver !== 'undefined' && headerRef.value) {
@@ -71,6 +74,7 @@ onMounted(() => {
 
 // Re-measure whenever the active phase changes (tabs content can alter height)
 watch(() => props.activePhaseId, async () => {
+  if (!props.isMobile) return;
   await nextTick();
   measureHeader();
 });

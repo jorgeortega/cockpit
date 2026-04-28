@@ -188,9 +188,17 @@ const onChecklistTouchEnd = () => {
 onMounted(() => {
   syncViewportMode();
   window.addEventListener("resize", syncViewportMode);
-  // measure checklist height when mounted and on resize
-  measureChecklistHeight();
-  window.addEventListener('resize', measureChecklistHeight);
+});
+
+// Only measure and watch for checklist height on mobile
+watch(isMobile, (mobile) => {
+  if (mobile) {
+    measureChecklistHeight();
+    window.addEventListener('resize', measureChecklistHeight);
+  } else {
+    dynamicOpenHeight.value = null;
+    window.removeEventListener('resize', measureChecklistHeight);
+  }
 });
 
 onBeforeUnmount(() => {
@@ -226,15 +234,17 @@ onBeforeUnmount(() => {
       @touchend="onChecklistTouchEnd"
     >
       <button
+        v-if="isMobile"
         type="button"
         class="drawer-handle"
         aria-label="Toggle checklist"
-        @click="(isChecklistOpen = !isChecklistOpen) && measureChecklistHeight()"
+        @click="(isChecklistOpen = !isChecklistOpen) && (isChecklistOpen ? measureChecklistHeight() : null)"
       ></button>
       <ChecklistPanel
         :active-phase-id="activePhaseId"
         :completed-items="activeCompleted"
         :scroll-to-id="scrollToId"
+        :is-mobile="isMobile"
         @focus-item="handleFocusItem"
         @phase-change="handlePhaseChange"
         @toggle-item="handleToggleItem"
