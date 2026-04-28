@@ -18,7 +18,7 @@
  * Acronyms introduced in this file:
  *   QRH = Quick Reference Handbook (the paper checklist this UI mimics)
  */
-import { computed, nextTick, watch } from 'vue';
+import { computed, nextTick, watch, ref, onMounted, onBeforeUnmount } from 'vue';
 import { flightChecklists, getPhaseById } from '../data/checklist';
 import PhaseSelector from './PhaseSelector.vue';
 import ChecklistItemRow from './ChecklistItemRow.vue';
@@ -42,6 +42,38 @@ const emit = defineEmits<{
   (e: 'focus-item', id: string): void;
   (e: 'phase-change', id: string): void;
 }>();
+
+// --- Dynamic padding to avoid overlapping the drawer handle --------------
+// Refs for measuring header/tab height and applying top padding.
+const overlayRef = ref<HTMLElement | null>(null);
+const headerRef = ref<HTMLElement | null>(null);
+const paddingTop = ref<number>(20);
+
+const measureHeader = () => {
+  const el = headerRef.value;
+  if (!el) return;
+  const h = el.getBoundingClientRect().height || el.offsetHeight || 0;
+  paddingTop.value = Math.max(12, Math.round(h + 12));
+};
+
+onMounted(() => {
+  // initial measure after DOM paint
+  nextTick(measureHeader);
+  if (typeof ResizeObserver !== 'undefined' && headerRef.value) {
+    const ro = new ResizeObserver(measureHeader);
+    ro.observe(headerRef.value);
+    onBeforeUnmount(() => ro.disconnect());
+  } else {
+    window.addEventListener('resize', measureHeader);
+    onBeforeUnmount(() => window.removeEventListener('resize', measureHeader));
+  }
+});
+
+// Re-measure whenever the active phase changes (tabs content can alter height)
+watch(() => props.activePhaseId, async () => {
+  await nextTick();
+  measureHeader();
+});
 
 // --- Derived data -----------------------------------------------------------
 // Resolve the phase once per render. `?? []` keeps `v-for` safe if the parent
@@ -86,12 +118,14 @@ watch(() => props.scrollToId, async (id) => {
 </script>
 
 <template>
-  <div class="checklist-overlay">
-    <PhaseSelector
-      :phases="flightChecklists"
-      :active-phase-id="activePhaseId"
-      @phase-change="(id) => emit('phase-change', id)"
-    />
+  <div ref="overlayRef" class="checklist-overlay" :style="{ paddingTop: paddingTop + 'px' }">
+    <div ref="headerRef">
+      <PhaseSelector
+        :phases="flightChecklists"
+        :active-phase-id="activePhaseId"
+        @phase-change="(id) => emit('phase-change', id)"
+      />
+    </div>
     <div class="checklist-card">
       <h3>{{ heading }}</h3>
       <div
@@ -178,11 +212,5 @@ h3 {
   transition: width 0.25s ease-out;
 }
 
-@media (max-width: 900px) {
-  /* Give extra top padding on mobile so the drawer handle doesn't overlap
-     the phase tabs immediately below it. */
-  .checklist-overlay {
-    padding-top: 56px;
-  }
-}
+
 </style>
