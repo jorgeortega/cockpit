@@ -152,6 +152,16 @@ test.describe("Visual E2E - Mobile Zoom", () => {
     });
   });
 
+  test("mobile zoom at 200% (pinch)", async ({ page }) => {
+    // Pinch from 40px -> 80px (~2x)
+    await pinchZoom(page, 40, 80, 6);
+    await page.waitForTimeout(300);
+
+    await expect(page).toHaveScreenshot("mobile-zoom-200.png", {
+      fullPage: true,
+    });
+  });
+
   test("mobile zoom at 400% (pinch)", async ({ page }) => {
     // Pinch from 40px -> 160px (~4x)
     await pinchZoom(page, 40, 160, 8);
@@ -169,6 +179,16 @@ test.describe("Visual E2E - Mobile Zoom", () => {
     await page.waitForTimeout(300);
 
     await expect(page).toHaveScreenshot("mobile-zoom-500.png", {
+      fullPage: true,
+    });
+  });
+
+  test("mobile zoom at 1000% (pinch)", async ({ page }) => {
+    // Large pinch: 40px -> 400px (~10x)
+    await pinchZoom(page, 40, 400, 12);
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("mobile-zoom-1000.png", {
       fullPage: true,
     });
   });

@@ -80,6 +80,15 @@ onMounted(() => {
   }
 });
 
+// Re-measure when parent toggles mobile mode (App may switch viewport mode after
+// this component mounts). This ensures the header padding is correct without
+// requiring a user tab touch to trigger the measurement.
+watch(() => props.isMobile, async (mobile) => {
+  if (!mobile) return;
+  await nextTick();
+  measureHeader();
+});
+
 // Re-measure whenever the active phase changes (tabs content can alter height)
 watch(() => props.activePhaseId, async () => {
   if (!props.isMobile) return;

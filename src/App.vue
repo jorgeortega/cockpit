@@ -158,10 +158,10 @@ const onCockpitTouchStart = (e: TouchEvent) => {
   if (!isMobile.value) return;
   if (e.touches.length !== 1) return;
   touchStartY = e.touches[0].clientY;
-  // Only initiate the open-swipe if the touch started within the bottom 10%
-  // of the viewport. This reduces accidental opens from general touches.
+  // Allow opens when touch starts within the bottom ~30% of the viewport so
+  // swiping up from the lower area reliably opens the drawer on varied phones.
   const vh = window.innerHeight || document.documentElement.clientHeight;
-  if (touchStartY < vh * 0.9) {
+  if (touchStartY < vh * 0.7) {
     touchActive = false;
     return;
   }
@@ -257,6 +257,8 @@ onBeforeUnmount(() => {
         class="drawer-handle"
         aria-label="Toggle checklist"
         @click="(isChecklistOpen = !isChecklistOpen) && (isChecklistOpen ? measureChecklistHeight() : null)"
+        @touchstart="onCockpitTouchStart"
+        @touchmove="onCockpitTouchMove"
       />
       <ChecklistPanel
         :active-phase-id="activePhaseId"

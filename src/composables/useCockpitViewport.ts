@@ -93,42 +93,72 @@ export function useCockpitViewport(
   const setZoom = async (
     nextZoom: number,
     focal?: { clientX: number; clientY: number },
+    immediate = false,
   ) => {
     if (!cockpitRef.value || scaledW.value <= 0 || scaledH.value <= 0) {
       zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
       return;
     }
 
-    let widthRatio: number;
-    let heightRatio: number;
-
     const rect = cockpitRef.value.getBoundingClientRect();
+
+    // Capture previous scaled sizes so we can compute an exact mapping from
+    // image-space coordinates before/after zoom. This avoids centering math
+    // that can cause the image to visually shift during pinch gestures.
+    const prevScaledW = scaledW.value;
+    const prevScaledH = scaledH.value;
+
     if (focal) {
-      // Zoom toward the mouse/finger position
-      const fx = focal.clientX - rect.left;
-      const fy = focal.clientY - rect.top;
-      widthRatio = clamp(fx / Math.max(1, rect.width), 0, 1);
-      heightRatio = clamp(fy / Math.max(1, rect.height), 0, 1);
+      // Compute the image-space coordinate under the focal point (in pixels of
+      // the current scaled image).
+      const imageX = cockpitRef.value.scrollLeft + (focal.clientX - rect.left);
+      const imageY = cockpitRef.value.scrollTop + (focal.clientY - rect.top);
+
+      // Apply the zoom value first (so scaledW/scaledH will represent the new
+      // sizes after nextTick).
+      zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
+
+      if (!immediate) {
+        await nextTick();
+      }
+
+      // Compute new scroll so the same image-space coordinate maps to the same
+      // client coordinate (i.e., the image doesn't visually move under the
+      // fingers). We scale the image-space coordinate proportionally to the
+      // ratio of new/previous scaled dimensions.
+      const newScaledW = scaledW.value;
+      const newScaledH = scaledH.value;
+      const scaleX = prevScaledW > 0 ? newScaledW / prevScaledW : 1;
+      const scaleY = prevScaledH > 0 ? newScaledH / prevScaledH : 1;
+
+      const newImageX = imageX * scaleX;
+      const newImageY = imageY * scaleY;
+
+      const clientOffsetX = focal.clientX - rect.left;
+      const clientOffsetY = focal.clientY - rect.top;
+
+      setViewportScroll(newImageX - clientOffsetX, newImageY - clientOffsetY);
     } else {
-      // Zoom toward the center of the current viewport
+      // No focal - preserve the center behavior
       const currentCenterX = cockpitRef.value.scrollLeft + viewportW.value / 2;
       const currentCenterY = cockpitRef.value.scrollTop + viewportH.value / 2;
-      widthRatio = currentCenterX / scaledW.value;
-      heightRatio = currentCenterY / scaledH.value;
+      const widthRatio: number = currentCenterX / Math.max(1, scaledW.value);
+      const heightRatio: number = currentCenterY / Math.max(1, scaledH.value);
+
+      zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
+
+      if (!immediate) {
+        await nextTick();
+      }
+
+      const nextCenterX = widthRatio * scaledW.value;
+      const nextCenterY = heightRatio * scaledH.value;
+
+      setViewportScroll(
+        nextCenterX - viewportW.value / 2,
+        nextCenterY - viewportH.value / 2,
+      );
     }
-
-    zoom.value = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM.value);
-
-    // Wait for Vue to update the DOM (and the scene dimensions) before scrolling
-    await nextTick();
-
-    const nextCenterX = widthRatio * scaledW.value;
-    const nextCenterY = heightRatio * scaledH.value;
-
-    setViewportScroll(
-      nextCenterX - viewportW.value / 2,
-      nextCenterY - viewportH.value / 2,
-    );
   };
 
   /**

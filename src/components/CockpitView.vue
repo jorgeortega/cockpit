@@ -152,8 +152,13 @@ const onTouchStart = (event: TouchEvent) => {
 const onTouchMove = (event: TouchEvent) => {
   if (event.touches.length === 2 && initialPinchDistance > 0) {
     if (event.cancelable) event.preventDefault();
-    const scale = getPinchDistance(event) / initialPinchDistance;
-    viewport.setZoom(initialZoom * scale, pinchCenter ?? undefined);
+    const rawScale = getPinchDistance(event) / initialPinchDistance;
+    // Dampen pinch sensitivity on mobile for a more natural feel.
+    const dampFactor = props.isMobile ? 0.55 : 1;
+    const scale = 1 + (rawScale - 1) * dampFactor;
+    // Use immediate mode while pinching to avoid queued DOM ticks causing
+    // jumpy behavior during rapid touchmove events.
+    viewport.setZoom(initialZoom * scale, pinchCenter ?? undefined, true);
   }
 };
 
